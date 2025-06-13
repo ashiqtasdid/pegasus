@@ -19,6 +19,19 @@ RUN npm run build
 # Production stage
 FROM node:18-alpine AS production
 
+# Install Maven and Java
+RUN apk add --no-cache \
+    openjdk11-jre \
+    openjdk11-jdk \
+    maven \
+    bash \
+    curl \
+    git
+
+# Set Java environment variables
+ENV JAVA_HOME=/usr/lib/jvm/java-11-openjdk
+ENV PATH="$JAVA_HOME/bin:$PATH"
+
 # Set working directory
 WORKDIR /app
 
