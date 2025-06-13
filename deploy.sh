@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Pegasus Plugin Generator - Docker Rebuild and Deploy Script
-# This script will stop, remove, rebuild and redeploy the Docker containers
+# This script will stop, remove, rebuild and redeploy the Docker containers with Java 17
 
 set -e  # Exit on any error
 
@@ -10,7 +10,14 @@ RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
+PURPLE='\033[0;35m'
 NC='\033[0m' # No Color
+
+# Default options
+CLEAN_IMAGES=false
+FORCE=false
+QUICK_MODE=false
+BUILD_ONLY=false
 
 # Function to print colored output
 print_status() {
@@ -29,13 +36,46 @@ print_error() {
     echo -e "${RED}[ERROR]${NC} $1"
 }
 
+print_header() {
+    echo -e "${PURPLE}[PEGASUS]${NC} $1"
+}
+
+# Function to show help
+show_help() {
+    echo "Pegasus Plugin Generator - Docker Deployment Script"
+    echo ""
+    echo "Usage: $0 [options]"
+    echo ""
+    echo "Options:"
+    echo "  --quick           Quick mode: skip confirmations and detailed output"
+    echo "  --clean-images    Also remove Docker images (more thorough cleanup)"
+    echo "  --force          Skip confirmation prompts"
+    echo "  --build-only     Only build the image, don't deploy"
+    echo "  -h, --help       Show this help message"
+    echo ""
+    echo "Features:"
+    echo "  • Uses Java 17 (OpenJDK)"
+    echo "  • Includes Maven and build tools"
+    echo "  • Automatically fixes compilation errors with AI"
+    echo "  • Web UI available at http://localhost:3000/app"
+    echo ""
+    echo "This script will:"
+    echo "  1. Stop and remove existing Docker containers"
+    echo "  2. Optionally clean up Docker images"
+    echo "  3. Rebuild the application with latest changes (Java 17)"
+    echo "  4. Deploy and start the services"
+    echo "  5. Show application URLs and status"
+}
+
 # Function to check if Docker is running
 check_docker() {
     if ! docker info >/dev/null 2>&1; then
         print_error "Docker is not running. Please start Docker and try again."
         exit 1
     fi
-    print_success "Docker is running"
+    if [ "$QUICK_MODE" != true ]; then
+        print_success "Docker is running"
+    fi
 }
 
 # Function to check if docker-compose is available
@@ -46,9 +86,42 @@ check_docker_compose() {
         COMPOSE_CMD="docker compose"
     else
         print_error "Neither 'docker-compose' nor 'docker compose' is available"
-        exit 1
+        print_status "Falling back to direct Docker commands"
+        COMPOSE_CMD=""
+        return
     fi
-    print_success "Using: $COMPOSE_CMD"
+    if [ "$QUICK_MODE" != true ]; then
+        print_success "Using: $COMPOSE_CMD"
+    fi
+}
+
+# Function to verify Java 17 in container
+verify_java_version() {
+    if [ "$BUILD_ONLY" = true ]; then
+        return
+    fi
+    
+    print_status "Verifying Java 17 installation in container..."
+    
+    # Wait for container to be ready
+    sleep 3
+    
+    if [ -n "$COMPOSE_CMD" ]; then
+        JAVA_VERSION=$(docker exec -it pegasus-pegasus-1 java -version 2>&1 | head -n 1 || echo "Failed")
+    else
+        CONTAINER_ID=$(docker ps --filter "ancestor=pegasus" --format "{{.ID}}" | head -n 1)
+        if [ -n "$CONTAINER_ID" ]; then
+            JAVA_VERSION=$(docker exec -it $CONTAINER_ID java -version 2>&1 | head -n 1 || echo "Failed")
+        else
+            JAVA_VERSION="Container not found"
+        fi
+    fi
+    
+    if echo "$JAVA_VERSION" | grep -q "17\." ; then
+        print_success "Java 17 verified: $JAVA_VERSION"
+    else
+        print_warning "Java version check: $JAVA_VERSION"
+    fi
 }
 
 # Function to stop and remove existing containers
@@ -133,48 +206,28 @@ build_and_deploy() {
 
 # Function to show application URLs
 show_urls() {
-    print_status "Application URLs:"
+    if [ "$BUILD_ONLY" = true ]; then
+        print_success "🎉 Build completed successfully!"
+        return
+    fi
+    
+    print_header "Application Ready!"
+    echo ""
     echo -e "  ${GREEN}• Web UI:${NC}     http://localhost:3000/app"
     echo -e "  ${GREEN}• API:${NC}        http://localhost:3000"
     echo -e "  ${GREEN}• Health:${NC}     http://localhost:3000"
+    echo -e "  ${GREEN}• Java:${NC}       OpenJDK 17"
     echo ""
-    print_status "Use 'docker-compose logs -f' to follow logs"
-    print_status "Use 'docker-compose down' to stop services"
-}
-
-# Main execution
-main() {
-    print_status "🚀 Pegasus Plugin Generator - Docker Rebuild & Deploy"
-    print_status "=================================================="
-    echo ""
-    
-    # Check prerequisites
-    check_docker
-    check_docker_compose
-    echo ""
-    
-    # Cleanup existing deployment
-    cleanup_containers
-    echo ""
-    
-    # Optional: Clean up images (uncomment if you want to remove old images)
-    # cleanup_images
-    # echo ""
-    
-    # Build and deploy
-    build_and_deploy
-    echo ""
-    
-    # Show application information
-    show_urls
-    
-    print_success "🎉 Deployment completed successfully!"
+    if [ -n "$COMPOSE_CMD" ]; then
+        print_status "Use '$COMPOSE_CMD logs -f' to follow logs"
+        print_status "Use '$COMPOSE_CMD down' to stop services"
+    else
+        print_status "Use 'docker logs -f <container_id>' to follow logs"
+        print_status "Use 'docker stop <container_id>' to stop services"
+    fi
 }
 
 # Parse command line arguments
-CLEAN_IMAGES=false
-FORCE=false
-
 while [[ $# -gt 0 ]]; do
     case $1 in
         --clean-images)
@@ -185,19 +238,17 @@ while [[ $# -gt 0 ]]; do
             FORCE=true
             shift
             ;;
+        --quick)
+            QUICK_MODE=true
+            FORCE=true
+            shift
+            ;;
+        --build-only)
+            BUILD_ONLY=true
+            shift
+            ;;
         -h|--help)
-            echo "Usage: $0 [options]"
-            echo ""
-            echo "Options:"
-            echo "  --clean-images    Also remove Docker images (more thorough cleanup)"
-            echo "  --force          Skip confirmation prompts"
-            echo "  -h, --help       Show this help message"
-            echo ""
-            echo "This script will:"
-            echo "  1. Stop and remove existing Docker containers"
-            echo "  2. Optionally clean up Docker images"
-            echo "  3. Rebuild the application with latest changes"
-            echo "  4. Deploy and start the services"
+            show_help
             exit 0
             ;;
         *)
@@ -208,10 +259,63 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
+# Main execution
+main() {
+    if [ "$QUICK_MODE" != true ]; then
+        print_header "🚀 Pegasus Plugin Generator - Docker Rebuild & Deploy (Java 17)"
+        print_status "=============================================================="
+        echo ""
+    fi
+    
+    # Check prerequisites
+    check_docker
+    check_docker_compose
+    if [ "$QUICK_MODE" != true ]; then
+        echo ""
+    fi
+    
+    # Cleanup existing deployment
+    cleanup_containers
+    if [ "$QUICK_MODE" != true ]; then
+        echo ""
+    fi
+    
+    # Clean up images if requested
+    if [ "$CLEAN_IMAGES" = true ]; then
+        cleanup_images
+        if [ "$QUICK_MODE" != true ]; then
+            echo ""
+        fi
+    fi
+    
+    # Build and deploy
+    build_and_deploy
+    if [ "$QUICK_MODE" != true ]; then
+        echo ""
+    fi
+    
+    # Verify Java version
+    verify_java_version
+    if [ "$QUICK_MODE" != true ]; then
+        echo ""
+    fi
+    
+    # Show application information
+    show_urls
+    
+    if [ "$BUILD_ONLY" != true ]; then
+        print_success "🎉 Deployment completed successfully!"
+    fi
+}
+
 # Confirmation prompt (unless --force is used)
 if [ "$FORCE" != true ]; then
     echo ""
-    print_warning "This will stop and rebuild the Pegasus Plugin Generator"
+    if [ "$BUILD_ONLY" = true ]; then
+        print_warning "This will rebuild the Pegasus Plugin Generator Docker image"
+    else
+        print_warning "This will stop and rebuild the Pegasus Plugin Generator"
+    fi
     read -p "Do you want to continue? (y/N): " -n 1 -r
     echo ""
     if [[ ! $REPLY =~ ^[Yy]$ ]]; then
@@ -219,27 +323,6 @@ if [ "$FORCE" != true ]; then
         exit 0
     fi
     echo ""
-fi
-
-# Run cleanup_images if requested
-if [ "$CLEAN_IMAGES" = true ]; then
-    cleanup_images() {
-        print_status "Cleaning up Docker images..."
-        
-        # Remove pegasus images
-        if docker images --filter "reference=pegasus*" -q | grep -q .; then
-            print_status "Removing pegasus images..."
-            docker images --filter "reference=pegasus*" -q | xargs docker rmi -f
-            print_success "Pegasus images removed"
-        fi
-        
-        # Remove dangling images
-        if docker images -f "dangling=true" -q | grep -q .; then
-            print_status "Removing dangling images..."
-            docker image prune -f
-            print_success "Dangling images removed"
-        fi
-    }
 fi
 
 # Execute main function
