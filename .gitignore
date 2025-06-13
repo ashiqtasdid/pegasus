@@ -49,6 +49,7 @@ lerna-debug.log*
 # unnecessary files
 *.md
 
+generated
 # Runtime data
 pids
 *.pid

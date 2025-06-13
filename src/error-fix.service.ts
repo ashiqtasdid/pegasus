@@ -1,7 +1,9 @@
 import { Injectable } from '@nestjs/common';
-import { AiService, PluginProject } from './ai.service';
+import { ConfigService } from '@nestjs/config';
+import { AiService, PluginProject, OpenRouterMessage, OpenRouterRequest, OpenRouterResponse } from './ai.service';
 import { DiskReaderService, DiskProjectInfo } from './disk-reader.service';
 import { MavenService, CompilationResult } from './maven.service';
+import axios, { AxiosResponse } from 'axios';
 import * as fs from 'fs-extra';
 import * as path from 'path';
 
@@ -46,13 +48,28 @@ export interface CompilationErrorContext {
 @Injectable()
 export class ErrorFixService {
   private readonly MAX_FIX_ITERATIONS = 3;
-  private readonly errorFixModel = 'anthropic/claude-3-5-sonnet-20241022'; // Claude Sonnet 4 for code fixes
+  private readonly baseUrl = 'https://openrouter.ai/api/v1';
+  private readonly apiKey: string;
+  private readonly siteUrl: string;
+  private readonly siteName: string;
+  
+  // AI Model Configuration - Same as AI Service
+  private readonly errorFixModel = 'anthropic/claude-sonnet-4'; // Claude Sonnet 4 for error analysis and fixes
 
   constructor(
+    private readonly configService: ConfigService,
     private readonly aiService: AiService,
     private readonly diskReaderService: DiskReaderService,
     private readonly mavenService: MavenService,
-  ) {}
+  ) {
+    this.apiKey = this.configService.get<string>('OPENROUTER_API_KEY') || '';
+    this.siteUrl = this.configService.get<string>('YOUR_SITE_URL', 'http://localhost:3000');
+    this.siteName = this.configService.get<string>('YOUR_SITE_NAME', 'Pegasus Plugin Generator');
+
+    if (!this.apiKey) {
+      throw new Error('OPENROUTER_API_KEY is not configured in environment variables');
+    }
+  }
 
   async attemptErrorFix(
     userId: string,
@@ -192,153 +209,38 @@ export class ErrorFixService {
         fixAttempted: true,
       };
     }
-  }
-  private async generateErrorFix(
+  }  private async generateErrorFix(
     errorContext: CompilationErrorContext,
   ): Promise<ErrorFixResponse | null> {
+    console.log(`🤖 Error Fix Service: Starting error analysis for "${errorContext.pluginName}"`);
+    console.log(`🎯 Error Fix Service: Using Claude Sonnet 4 for error analysis and fixes`);
+    
     try {
       const fixPrompt = this.buildErrorFixPrompt(errorContext);
+      console.log(`📝 Error Fix Service: Built error fix prompt: ${fixPrompt.length} characters`);
 
-      // Use AI service to get the raw response
-      const enhancedPrompt = await this.aiService.enhancePrompt(fixPrompt);
-      const rawResponse = await this.callOpenRouterForFix(enhancedPrompt);
-
-      if (!rawResponse) {
-        console.error('AI service returned no response for error fix');
-        return null;
-      }      // Parse the JSON response
-      try {
-        console.log(`🔍 Error Fix Service: Parsing AI response...`);
-        console.log(`📄 Error Fix Service: Raw response length: ${rawResponse.length} characters`);
-        
-        let jsonString = rawResponse.trim();
-        
-        // Remove markdown code blocks if present
-        if (jsonString.startsWith('```json')) {
-          console.log(`🧹 Error Fix Service: Removing markdown json code block wrapper`);
-          jsonString = jsonString.replace(/^```json\s*/, '').replace(/\s*```$/, '');
-        } else if (jsonString.startsWith('```')) {
-          console.log(`🧹 Error Fix Service: Removing markdown code block wrapper`);
-          jsonString = jsonString.replace(/^```\s*/, '').replace(/\s*```$/, '');
-        }
-        
-        // Try to extract JSON object if there's still text around it
-        const jsonMatch = jsonString.match(/\{[\s\S]*\}/);
-        if (jsonMatch) {
-          jsonString = jsonMatch[0];
-          console.log(`📦 Error Fix Service: Extracted JSON object from response`);
-        }
-        
-        console.log(`🔍 Error Fix Service: Attempting to parse ${jsonString.length} character JSON string`);
-        const fixResponse: ErrorFixResponse = JSON.parse(jsonString);
-
-        // Validate the response structure
-        if (!fixResponse.operations || !Array.isArray(fixResponse.operations)) {
-          console.error(
-            'Invalid fix response: missing or invalid operations array',
-          );
-          return null;
-        }        return fixResponse;
-      } catch (parseError) {
-        console.error('Failed to parse AI fix response as JSON:', parseError);
-        console.error('Raw response length:', rawResponse.length);
-        console.error('Raw response preview (first 500 chars):', rawResponse.substring(0, 500));
-        console.error('Raw response preview (last 100 chars):', rawResponse.substring(Math.max(0, rawResponse.length - 100)));
-        return null;
-      }
-    } catch (error) {
-      console.error('Error generating fix:', error);
-      return null;
-    }
-  }
-  private async callOpenRouterForFix(prompt: string): Promise<string | null> {
-    console.log(`🔧 Error Fix Service: Using Claude Sonnet 4 for error analysis and fixes`);
-    try {
-      // Use the same API call pattern as the AI service
-      const apiKey = process.env.OPENROUTER_API_KEY;
-      if (!apiKey) {
-        throw new Error('OPENROUTER_API_KEY not configured');
-      }
-
-      const response = await fetch(
-        'https://openrouter.ai/api/v1/chat/completions',
+      const messages: OpenRouterMessage[] = [
         {
-          method: 'POST',
-          headers: {
-            Authorization: `Bearer ${apiKey}`,
-            'Content-Type': 'application/json',
-            'HTTP-Referer':
-              process.env.YOUR_SITE_URL || 'http://localhost:3000',
-            'X-Title': process.env.YOUR_SITE_NAME || 'Pegasus Plugin Generator',
-          },          body: JSON.stringify({
-            model: this.errorFixModel, // Claude Sonnet 4 for code fixes
-            messages: [
-              {
-                role: 'system',
-                content: 'You are a Minecraft plugin compilation error fixing expert. You MUST respond with ONLY valid JSON. No explanations, no text outside the JSON structure. Your response must be parseable by JSON.parse().'
-              },
-              {
-                role: 'user',
-                content: prompt,
-              },            ],
-            temperature: 0.1
-            // No max_tokens limit - allow unlimited code generation for comprehensive fixes
-          }),
-        },
-      );
-
-      const result = await response.json();
-
-      if (!result.choices || result.choices.length === 0) {
-        console.error('No choices in OpenRouter response');
-        return null;
-      }
-
-      return result.choices[0].message.content;
-    } catch (error) {
-      console.error('Error calling OpenRouter for fix:', error);
-      return null;
-    }
-  }
-  private buildErrorFixPrompt(errorContext: CompilationErrorContext): string {
-    const { compilationLogs, currentProject, pluginName } = errorContext;
-
-    // Create a complete project snapshot as JSON
-    const projectSnapshot = JSON.stringify(
-      {
-        projectName: currentProject.projectName,        minecraftVersion: currentProject.minecraftVersion,
-        files: currentProject.files,
-        dependencies: currentProject.dependencies,
-        buildInstructions: currentProject.buildInstructions,
-      },
-      null,
-      2,
-    );    return `RESPOND WITH ONLY JSON - NO MARKDOWN, NO CODE BLOCKS, NO OTHER TEXT!
-
-PROJECT: ${currentProject.projectName}
-MINECRAFT VERSION: ${currentProject.minecraftVersion}
-
-EXISTING PROJECT FILES:
-${projectSnapshot}
-
-COMPILATION ERRORS TO FIX:
-${compilationLogs}
+          role: 'system',
+          content: `You are a Minecraft plugin compilation error fixing expert. You MUST respond with ONLY a valid JSON object. No explanations, no markdown code blocks, no text outside the JSON structure.
 
 RESPOND WITH ONLY RAW JSON (DO NOT use code block markdown formatting):
 {
-  "fixDescription": "Brief description of what compilation errors were fixed",
+  "fixDescription": "string (brief description of what compilation errors were fixed)",
   "operations": [
     {
-      "type": "UPDATE",
+      "type": "UPDATE" | "CREATE" | "DELETE" | "RENAME",
       "file": {
-        "path": "relative/file/path",
-        "content": "complete updated file content with minimal changes to fix errors only",
-        "reason": "specific compilation error being fixed"
+        "path": "string (relative file path from project root)",
+        "oldPath": "string (for RENAME operations)",
+        "newPath": "string (for RENAME operations)",
+        "content": "string (complete updated file content with proper escaping)",
+        "reason": "string (specific compilation error being fixed)"
       }
     }
   ],
-  "buildCommands": ["mvn clean compile package"],
-  "expectedOutcome": "compilation success with preserved functionality"
+  "buildCommands": ["array of build command strings"],
+  "expectedOutcome": "string (expected compilation outcome)"
 }
 
 CRITICAL RULES FOR ERROR FIXING:
@@ -349,17 +251,173 @@ CRITICAL RULES FOR ERROR FIXING:
 - Maintain the original plugin structure and features
 - Include complete file content for UPDATE/CREATE operations
 - Focus on minimal changes that resolve compilation issues
-- NO markdown formatting, NO code blocks, ONLY raw JSON`;
+- Escape all special characters properly in JSON (newlines as \\n, quotes as \\")
+- NO markdown formatting, NO code blocks, ONLY raw JSON
+- Ensure all strings are properly escaped for JSON format
+- DO NOT include any explanations, comments, or additional text outside the JSON structure`
+        },
+        {
+          role: 'user',
+          content: fixPrompt
+        }
+      ];
+
+      console.log(`🌐 Error Fix Service: Calling OpenRouter API with Claude Sonnet 4 for error analysis`);
+      const response = await this.callOpenRouter({
+        model: this.errorFixModel,
+        messages,
+        temperature: 0.1,
+        max_tokens: 12000, // Allow large responses for complex fixes
+      });
+
+      console.log(`✅ Error Fix Service: Received response from OpenRouter (${response.usage?.total_tokens || 'unknown'} tokens)`);
+
+      const aiResponse = response.choices[0]?.message?.content || '';
+      console.log(`� Error Fix Service: Response length: ${aiResponse.length} characters`);
+
+      try {
+        // Parse the JSON response using the same logic as AI service
+        console.log(`🔍 Error Fix Service: Parsing JSON response...`);
+        
+        let jsonString = aiResponse.trim();
+        
+        // Remove markdown code blocks if present
+        if (jsonString.startsWith('```json')) {
+          console.log(`🧹 Error Fix Service: Removing markdown json code block wrapper`);
+          jsonString = jsonString.replace(/^```json\s*/, '').replace(/\s*```$/, '');
+        } else if (jsonString.startsWith('```')) {
+          console.log(`🧹 Error Fix Service: Removing markdown code block wrapper`);
+          jsonString = jsonString.replace(/^```\s*/, '').replace(/\s*```$/, '');
+        }
+        
+        // Try to extract JSON object
+        const jsonMatch = jsonString.match(/\{[\s\S]*\}/);
+        if (!jsonMatch) {
+          console.log(`❌ Error Fix Service: No JSON found in AI response`);
+          throw new Error('No JSON found in AI response');
+        }
+        
+        console.log(`🔍 Error Fix Service: Attempting to parse ${jsonMatch[0].length} character JSON string`);
+        const fixResponse: ErrorFixResponse = JSON.parse(jsonMatch[0]);
+        console.log(`✅ Error Fix Service: Successfully parsed JSON fix response`);
+        console.log(`🔧 Error Fix Service: Generated ${fixResponse.operations?.length || 0} operations for error fixing`);
+        
+        // Validate the response structure
+        if (!fixResponse.operations || !Array.isArray(fixResponse.operations)) {
+          console.log(`❌ Error Fix Service: Invalid fix response structure`);
+          throw new Error('Invalid fix response: missing or invalid operations array');
+        }
+        
+        console.log(`🎉 Error Fix Service: Error analysis completed successfully`);
+        return fixResponse;
+      } catch (parseError) {
+        console.log(`⚠️ Error Fix Service: JSON parsing failed: ${parseError.message}`);
+        console.log(`📄 Error Fix Service: Raw response preview (first 500 chars): ${aiResponse.substring(0, 500)}`);
+        console.log(`📄 Error Fix Service: Raw response preview (last 100 chars): ${aiResponse.substring(Math.max(0, aiResponse.length - 100))}`);
+        return null;
+      }
+    } catch (error) {      console.error(`❌ Error Fix Service: Error generating fix: ${error.message}`);
+      return null;
+    }
   }
 
+  private async callOpenRouter(request: OpenRouterRequest): Promise<OpenRouterResponse> {
+    const startTime = Date.now();
+    console.log(`� Error Fix Service: Making HTTP request to OpenRouter API`);
+    console.log(`📊 Error Fix Service: Request model: ${request.model}, temperature: ${request.temperature}, max_tokens: ${request.max_tokens}`);
+    
+    try {
+      const response: AxiosResponse<OpenRouterResponse> = await axios.post(
+        `${this.baseUrl}/chat/completions`,
+        request,
+        {
+          headers: {
+            'Authorization': `Bearer ${this.apiKey}`,
+            'Content-Type': 'application/json',
+            'HTTP-Referer': this.siteUrl,
+            'X-Title': this.siteName,
+          },
+        }
+      );
+
+      const duration = Date.now() - startTime;
+      console.log(`✅ Error Fix Service: OpenRouter API call completed in ${duration}ms`);
+      console.log(`📊 Error Fix Service: Token usage - prompt: ${response.data.usage?.prompt_tokens}, completion: ${response.data.usage?.completion_tokens}, total: ${response.data.usage?.total_tokens}`);
+
+      return response.data;
+    } catch (error) {
+      const duration = Date.now() - startTime;      console.error(`❌ Error Fix Service: OpenRouter API call failed after ${duration}ms`);
+      
+      if (axios.isAxiosError(error)) {
+        console.error(`❌ Error Fix Service: HTTP ${error.response?.status} - ${error.response?.data?.error?.message || error.message}`);
+        throw new Error(`OpenRouter API error: ${error.response?.data?.error?.message || error.message}`);
+      }
+      console.error(`❌ Error Fix Service: Unexpected error: ${error.message}`);
+      throw new Error(`Failed to call OpenRouter API: ${error.message}`);
+    }
+  }
+  private buildErrorFixPrompt(errorContext: CompilationErrorContext): string {
+    console.log(`🔧 Error Fix Service: Building error fix prompt for "${errorContext.pluginName}"`);
+    const { compilationLogs, currentProject, pluginName } = errorContext;
+
+    // Create a complete project snapshot as JSON
+    console.log(`📁 Error Fix Service: Creating project snapshot with ${currentProject.files.length} files`);
+    const projectSnapshot = JSON.stringify(
+      {
+        projectName: currentProject.projectName,
+        minecraftVersion: currentProject.minecraftVersion,
+        files: currentProject.files,
+        dependencies: currentProject.dependencies,
+        buildInstructions: currentProject.buildInstructions,
+      },
+      null,
+      2,
+    );
+
+    const prompt = `PROJECT COMPILATION ERROR ANALYSIS
+
+PROJECT DETAILS:
+- Name: ${currentProject.projectName}
+- Minecraft Version: ${currentProject.minecraftVersion}
+- Files Count: ${currentProject.files.length}
+
+CURRENT PROJECT STATE:
+${projectSnapshot}
+
+COMPILATION ERRORS TO ANALYZE AND FIX:
+${compilationLogs}
+
+INSTRUCTIONS:
+You are analyzing compilation errors for a Minecraft plugin project. Your goal is to provide targeted fixes that resolve compilation issues while preserving existing functionality.
+
+CRITICAL REQUIREMENTS:
+- Analyze the compilation errors carefully
+- Preserve existing functionality and complex logic wherever possible
+- ONLY fix actual compilation errors, don't simplify working code
+- Fix imports, syntax errors, missing dependencies, incorrect API usage
+- DO NOT replace complex implementations with simple ones
+- Maintain the original plugin structure and features
+- Include complete file content for UPDATE/CREATE operations
+- Focus on minimal changes that resolve compilation issues
+- Ensure all file paths are relative to the project root
+- Make sure all modifications are syntactically correct and follow Java best practices`;
+
+    console.log(`✅ Error Fix Service: Built error fix prompt (${prompt.length} characters)`);
+    return prompt;
+  }
   private async applyFixOperations(
     fixResponse: ErrorFixResponse,
     errorContext: CompilationErrorContext,
   ): Promise<number> {
+    console.log(`🔧 Error Fix Service: Applying ${fixResponse.operations.length} fix operations`);
+    console.log(`📝 Error Fix Service: Fix description: ${fixResponse.fixDescription}`);
+    
     let operationsApplied = 0;
 
     try {
       for (const operation of fixResponse.operations) {
+        console.log(`🔄 Error Fix Service: Processing ${operation.type} operation for ${operation.file.path || operation.file.oldPath || 'unknown'}`);
+        
         try {
           switch (operation.type) {
             case 'UPDATE':
@@ -372,9 +430,11 @@ CRITICAL RULES FOR ERROR FIXING:
                 await fs.ensureDir(path.dirname(filePath));
                 await fs.writeFile(filePath, operation.file.content, 'utf8');
                 console.log(
-                  `${operation.type}: ${operation.file.path} - ${operation.file.reason}`,
+                  `✅ ${operation.type}: ${operation.file.path} - ${operation.file.reason}`,
                 );
                 operationsApplied++;
+              } else {
+                console.warn(`⚠️ Skipping ${operation.type} operation: missing path or content`);
               }
               break;
 
@@ -387,10 +447,14 @@ CRITICAL RULES FOR ERROR FIXING:
                 if (await fs.pathExists(filePath)) {
                   await fs.remove(filePath);
                   console.log(
-                    `DELETE: ${operation.file.path} - ${operation.file.reason}`,
+                    `✅ DELETE: ${operation.file.path} - ${operation.file.reason}`,
                   );
                   operationsApplied++;
+                } else {
+                  console.warn(`⚠️ File not found for deletion: ${operation.file.path}`);
                 }
+              } else {
+                console.warn(`⚠️ Skipping DELETE operation: missing path`);
               }
               break;
 
@@ -408,23 +472,28 @@ CRITICAL RULES FOR ERROR FIXING:
                   await fs.ensureDir(path.dirname(newFilePath));
                   await fs.move(oldFilePath, newFilePath);
                   console.log(
-                    `RENAME: ${operation.file.oldPath} -> ${operation.file.newPath} - ${operation.file.reason}`,
+                    `✅ RENAME: ${operation.file.oldPath} -> ${operation.file.newPath} - ${operation.file.reason}`,
                   );
                   operationsApplied++;
+                } else {
+                  console.warn(`⚠️ Source file not found for rename: ${operation.file.oldPath}`);
                 }
+              } else {
+                console.warn(`⚠️ Skipping RENAME operation: missing oldPath or newPath`);
               }
               break;
 
             default:
-              console.warn(`Unknown operation type: ${operation.type}`);
+              console.warn(`⚠️ Unknown operation type: ${operation.type}`);
           }
         } catch (opError) {
           console.error(
-            `Failed to apply operation ${operation.type}:`,
-            opError,
+            `❌ Failed to apply operation ${operation.type} for ${operation.file.path || operation.file.oldPath}:`,
+            opError.message,
           );
-        }
-      }
+        }      }
+
+      console.log(`📊 Error Fix Service: Successfully applied ${operationsApplied} of ${fixResponse.operations.length} operations`);
 
       // Update project-info.json with fix information
       const projectInfoPath = path.join(
@@ -447,13 +516,16 @@ CRITICAL RULES FOR ERROR FIXING:
             JSON.stringify(projectInfo, null, 2),
             'utf8',
           );
+          console.log(`📄 Error Fix Service: Updated project-info.json with fix details`);
         } catch (error) {
-          console.warn('Could not update project-info.json:', error.message);
+          console.warn(`⚠️ Error Fix Service: Could not update project-info.json: ${error.message}`);
         }
       }
     } catch (error) {
-      console.error('Error applying fix operations:', error);
+      console.error(`❌ Error Fix Service: Error applying fix operations: ${error.message}`);
     }
+    
+    console.log(`🎯 Error Fix Service: Completed operation application - ${operationsApplied} operations applied`);
     return operationsApplied;
   }
 

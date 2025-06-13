@@ -112,6 +112,7 @@ REQUIREMENTS:
 - Also no files should be larger than 400 lines of code, split them if necessary & make them modular
 - Make sure you do not leave any TODOs or incomplete sections in the code
 - Code should be production-ready and fully functional and fully complete
+- You do not need to generate long codes if the plugin is simple, but if it is complex, generate as much code as needed
 `
       },
       {
@@ -123,6 +124,7 @@ REQUIREMENTS:
     const response = await this.callOpenRouter({
       model: this.codeGenerationModel,
       messages,
+      max_tokens: 12000, // Allow large responses for complex plugins
             // No max_tokens limit - allow unlimited code generation for complex plugins
     });
     

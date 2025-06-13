@@ -336,4 +336,18 @@ export class AppService {  constructor(
       return { exists: false, hasCompiledJar: false };
     }
   }
+
+  async attemptErrorFix(userId: string, pluginName: string, maxIterations: number = 3) {
+    console.log(`🔧 App Service: Delegating error fix to ErrorFixService`);
+    console.log(`📊 App Service: Parameters - userId: "${userId}", pluginName: "${pluginName}", maxIterations: ${maxIterations}`);
+    
+    const startTime = Date.now();
+    const result = await this.errorFixService.attemptErrorFix(userId, pluginName, maxIterations);
+    const duration = Date.now() - startTime;
+    
+    console.log(`${result.success ? '✅' : '❌'} App Service: Error fix ${result.success ? 'completed' : 'failed'} in ${duration}ms`);
+    console.log(`📊 App Service: Fix result - fixAttempted: ${result.fixAttempted}, iterations: ${result.iterations}, operations: ${result.operationsApplied || 0}`);
+    
+    return result;
+  }
 }

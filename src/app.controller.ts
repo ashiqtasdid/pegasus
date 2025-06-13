@@ -141,6 +141,35 @@ export class AppController {  constructor(
       message: success ? 'Project cleaned successfully' : 'Failed to clean project'
     };
   }
+  @Post('plugin/fix-errors')
+  async fixPluginErrors(
+    @Body('userId') userId: string,
+    @Body('pluginName') pluginName: string,
+    @Body('maxIterations') maxIterations: number = 3
+  ): Promise<{ success: boolean; message: string; fixAttempted: boolean; iterations?: number; operationsApplied?: number }> {
+    console.log(`🔧 Error fix requested:`, { userId, pluginName, maxIterations });
+    
+    const startTime = Date.now();
+    const result = await this.appService.attemptErrorFix(userId, pluginName, maxIterations);
+    const duration = Date.now() - startTime;
+    
+    console.log(`${result.success ? '✅' : '❌'} Error fix ${result.success ? 'completed' : 'failed'} in ${duration}ms:`, {
+      userId,
+      pluginName,
+      success: result.success,
+      fixAttempted: result.fixAttempted,
+      iterations: result.iterations
+    });
+    
+    return {
+      success: result.success,
+      message: result.message,
+      fixAttempted: result.fixAttempted,
+      iterations: result.iterations,
+      operationsApplied: result.operationsApplied
+    };
+  }
+
   @Post('plugin/generate-and-compile')
   async generateAndCompilePlugin(
     @Body('prompt') prompt: string,
