@@ -1,0 +1,163 @@
+/* Custom styles for Pegasus Plugin Generator */
+
+.gradient-bg {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+}
+
+.code-container {
+    background: #1a1a1a;
+    border-radius: 8px;
+    overflow: hidden;
+}
+
+.loading-dots::after {
+    content: '';
+    animation: dots 1.5s steps(5, end) infinite;
+}
+
+@keyframes dots {
+    0%, 20% { content: ''; }
+    40% { content: '.'; }
+    60% { content: '..'; }
+    80%, 100% { content: '...'; }
+}
+
+.pulse-ring {
+    animation: pulse-ring 1.25s ease-in-out infinite;
+}
+
+@keyframes pulse-ring {
+    0% { transform: scale(0.33); }
+    40%, 50% { opacity: 1; }
+    100% { opacity: 0; transform: scale(1.33); }
+}
+
+/* Syntax highlighting for code blocks */
+.code-container pre {
+    background: #1e1e1e;
+    color: #d4d4d4;
+}
+
+.code-container .keyword {
+    color: #569cd6;
+}
+
+.code-container .string {
+    color: #ce9178;
+}
+
+.code-container .comment {
+    color: #6a9955;
+}
+
+/* Responsive improvements */
+@media (max-width: 640px) {
+    .gradient-bg h1 {
+        font-size: 1rem;
+    }
+    
+    .hero h2 {
+        font-size: 1.5rem;
+    }
+}
+
+/* Custom scrollbar for code blocks */
+.code-container pre::-webkit-scrollbar {
+    height: 8px;
+}
+
+.code-container pre::-webkit-scrollbar-track {
+    background: #2d2d30;
+}
+
+.code-container pre::-webkit-scrollbar-thumb {
+    background: #464647;
+    border-radius: 4px;
+}
+
+.code-container pre::-webkit-scrollbar-thumb:hover {
+    background: #5a5a5c;
+}
+
+/* Button hover effects */
+.btn-primary {
+    transition: all 0.2s ease-in-out;
+}
+
+.btn-primary:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+/* Loading animation improvements */
+.loading-container {
+    animation: fadeIn 0.3s ease-in-out;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+/* Success/Error state animations */
+.result-container {
+    animation: slideInUp 0.4s ease-out;
+}
+
+@keyframes slideInUp {
+    from { opacity: 0; transform: translateY(20px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+/* File tree styling */
+.file-tree {
+    position: relative;
+}
+
+.file-tree::before {
+    content: '';
+    position: absolute;
+    left: 12px;
+    top: 0;
+    bottom: 0;
+    width: 1px;
+    background: #e5e7eb;
+}
+
+.file-item {
+    position: relative;
+    padding-left: 24px;
+}
+
+.file-item::before {
+    content: '';
+    position: absolute;
+    left: 12px;
+    top: 12px;
+    width: 12px;
+    height: 1px;
+    background: #e5e7eb;
+}
+
+/* Improve form styling */
+.form-group {
+    transition: all 0.2s ease-in-out;
+}
+
+.form-group:focus-within {
+    transform: translateY(-1px);
+}
+
+/* Toast notifications */
+.toast {
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    z-index: 1000;
+    animation: slideInRight 0.3s ease-out;
+}
+
+@keyframes slideInRight {
+    from { transform: translateX(100%); }
+    to { transform: translateX(0); }
+}

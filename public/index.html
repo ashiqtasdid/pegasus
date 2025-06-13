@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pegasus - AI Minecraft Plugin Generator</title>    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🚀</text></svg>">    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <link href="styles.css" rel="stylesheet">
+</head>
+<body class="bg-gray-50 min-h-screen">
+    <!-- Header -->
+    <nav class="gradient-bg shadow-lg">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex justify-between h-16">
+                <div class="flex items-center">
+                    <i class="fas fa-magic text-white text-2xl mr-3"></i>
+                    <h1 class="text-white text-xl font-bold">Pegasus Plugin Generator</h1>
+                </div>
+                <div class="flex items-center space-x-4">
+                    <span class="text-white text-sm">AI-Powered Minecraft Plugin Creation</span>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Main Content -->
+    <div class="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
+        <!-- Hero Section -->
+        <div class="px-4 py-6 sm:px-0">
+            <div class="text-center mb-8">
+                <h2 class="text-3xl font-extrabold text-gray-900 sm:text-4xl">
+                    Generate Minecraft Plugins with AI
+                </h2>
+                <p class="mt-4 text-xl text-gray-600">
+                    Describe your plugin idea and let AI create a complete, compilable Minecraft plugin for you
+                </p>
+            </div>
+
+            <!-- Main Form -->
+            <div class="max-w-4xl mx-auto">
+                <div class="bg-white overflow-hidden shadow rounded-lg">
+                    <div class="px-4 py-5 sm:p-6">
+                        <form id="pluginForm" class="space-y-6">
+                            <!-- Plugin Prompt -->
+                            <div>
+                                <label for="prompt" class="block text-sm font-medium text-gray-700 mb-2">
+                                    <i class="fas fa-lightbulb text-yellow-500 mr-2"></i>
+                                    Describe your plugin idea
+                                </label>
+                                <textarea 
+                                    id="prompt" 
+                                    name="prompt" 
+                                    rows="4" 
+                                    class="shadow-sm focus:ring-indigo-500 focus:border-indigo-500 mt-1 block w-full sm:text-sm border-gray-300 rounded-md"
+                                    placeholder="Example: Create a teleportation plugin that allows players to set home locations and teleport to them using commands like /sethome and /home. Include cooldowns and permission checks."
+                                    required
+                                ></textarea>
+                            </div>
+
+                            <!-- User ID -->
+                            <div>
+                                <label for="userId" class="block text-sm font-medium text-gray-700 mb-2">
+                                    <i class="fas fa-user text-blue-500 mr-2"></i>
+                                    User ID
+                                </label>
+                                <input 
+                                    type="text" 
+                                    id="userId" 
+                                    name="userId" 
+                                    class="shadow-sm focus:ring-indigo-500 focus:border-indigo-500 mt-1 block w-full sm:text-sm border-gray-300 rounded-md"
+                                    placeholder="your-username"
+                                    required
+                                />
+                            </div>                            <!-- Plugin Name -->
+                            <div>
+                                <label for="pluginName" class="block text-sm font-medium text-gray-700 mb-2">
+                                    <i class="fas fa-tag text-green-500 mr-2"></i>
+                                    Plugin Name (optional)
+                                </label>
+                                <input 
+                                    type="text" 
+                                    id="pluginName" 
+                                    name="pluginName" 
+                                    class="shadow-sm focus:ring-indigo-500 focus:border-indigo-500 mt-1 block w-full sm:text-sm border-gray-300 rounded-md"
+                                    placeholder="MyAwesomePlugin (leave empty for auto-generated name)"
+                                />
+                                <div id="projectStatus" class="mt-2 text-sm hidden"></div>
+                            </div>
+
+                            <!-- Generate Button -->
+                            <div class="flex justify-center">
+                                <button 
+                                    type="submit" 
+                                    id="generateBtn"
+                                    class="inline-flex items-center px-6 py-3 border border-transparent text-base font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                                >
+                                    <i class="fas fa-rocket mr-2"></i>
+                                    Generate Plugin
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+
+                <!-- Loading State -->
+                <div id="loadingState" class="hidden mt-8">
+                    <div class="bg-white overflow-hidden shadow rounded-lg">
+                        <div class="px-4 py-5 sm:p-6 text-center">
+                            <div class="inline-flex items-center">
+                                <div class="pulse-ring h-4 w-4 bg-indigo-600 rounded-full mr-3"></div>
+                                <span class="text-lg font-medium text-gray-900">
+                                    Generating your plugin<span class="loading-dots"></span>
+                                </span>
+                            </div>
+                            <p class="mt-2 text-sm text-gray-500">
+                                This may take a few moments. The AI is creating and compiling your plugin.
+                            </p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Results Section -->
+                <div id="resultsSection" class="hidden mt-8">
+                    <div class="bg-white overflow-hidden shadow rounded-lg">
+                        <div class="px-4 py-5 sm:p-6">
+                            <h3 class="text-lg leading-6 font-medium text-gray-900 mb-4">
+                                <i class="fas fa-check-circle text-green-500 mr-2"></i>
+                                Generation Results
+                            </h3>
+                            <div id="resultsContent" class="space-y-4">
+                                <!-- Results will be populated here -->
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Project Explorer -->
+                <div id="projectSection" class="hidden mt-8">
+                    <div class="bg-white overflow-hidden shadow rounded-lg">
+                        <div class="px-4 py-5 sm:p-6">
+                            <div class="flex justify-between items-center mb-4">
+                                <h3 class="text-lg leading-6 font-medium text-gray-900">
+                                    <i class="fas fa-folder-open text-blue-500 mr-2"></i>
+                                    Project Files
+                                </h3>
+                                <button 
+                                    id="refreshProjectBtn"
+                                    class="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm leading-4 font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+                                >
+                                    <i class="fas fa-sync-alt mr-2"></i>
+                                    Refresh
+                                </button>
+                            </div>
+                            <div id="projectFiles" class="space-y-3">
+                                <!-- Project files will be loaded here -->
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Footer -->
+    <footer class="bg-white border-t border-gray-200 mt-12">
+        <div class="max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-8">
+            <div class="text-center">
+                <p class="text-sm text-gray-500">
+                    Powered by OpenRouter AI • Built with NestJS • 
+                    <i class="fas fa-heart text-red-500"></i> 
+                    for Minecraft Plugin Developers
+                </p>
+            </div>
+        </div>
+    </footer>
+
+    <script src="app.js"></script>
+</body>
+</html>

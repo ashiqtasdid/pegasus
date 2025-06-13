@@ -1,0 +1,27 @@
+version: '3.8'
+
+services:
+  pegasus:
+    build: .
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
+      - OPENROUTER_API_KEY=${OPENROUTER_API_KEY}
+      - YOUR_SITE_URL=${YOUR_SITE_URL:-http://localhost:3000}
+      - YOUR_SITE_NAME=${YOUR_SITE_NAME:-Pegasus Plugin Generator}
+    volumes:
+      # Persist generated plugins
+      - generated_plugins:/app/generated
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:3000', (res) => { process.exit(res.statusCode === 200 ? 0 : 1) })"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+volumes:
+  generated_plugins:
+    driver: local
