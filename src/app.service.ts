@@ -113,9 +113,7 @@ export class AppService {  constructor(
       // Generate plugin project using AI
       console.log(`🤖 App Service: Generating plugin code with AI...`);
       const pluginProject = await this.aiService.generatePluginCode(enhancedPrompt, pluginName);      
-      console.log(`✅ App Service: AI generated ${pluginProject.files.length} files`);
-
-      // Create all the files from the plugin project
+      console.log(`✅ App Service: AI generated ${pluginProject.files.length} files`);      // Create all the files from the plugin project
       console.log(`💾 App Service: Writing files to disk...`);
       for (const file of pluginProject.files) {
         const filePath = path.join(pluginPath, file.path);
@@ -124,8 +122,8 @@ export class AppService {  constructor(
         // Ensure the directory exists for this file
         await fs.ensureDir(path.dirname(filePath));
         
-        // Write the file content
-        await fs.writeFile(filePath, file.content, 'utf8');
+        // Write the file content safely
+        await this.safeWriteFile(filePath, file.content, 'utf8');
       }
       console.log(`✅ App Service: All ${pluginProject.files.length} files written to disk`);
       
@@ -140,7 +138,8 @@ export class AppService {  constructor(
       };
       
       const summaryPath = path.join(pluginPath, 'project-info.json');
-      await fs.writeFile(summaryPath, JSON.stringify(projectSummary, null, 2), 'utf8');
+      const summaryContent = this.safeJSONStringify(projectSummary);
+      await this.safeWriteFile(summaryPath, summaryContent, 'utf8');
       console.log(`✅ App Service: Project metadata saved`);
       
       // Process the response
@@ -349,5 +348,46 @@ export class AppService {  constructor(
     console.log(`📊 App Service: Fix result - fixAttempted: ${result.fixAttempted}, iterations: ${result.iterations}, operations: ${result.operationsApplied || 0}`);
     
     return result;
+  }
+
+  /**
+   * Safely write a file with comprehensive error handling
+   */
+  private async safeWriteFile(filePath: string, content: string, encoding: BufferEncoding = 'utf8'): Promise<void> {
+    try {
+      await fs.ensureDir(path.dirname(filePath));
+      if (typeof content !== 'string') {
+        content = String(content);
+      }
+      const tempPath = `${filePath}.tmp.${Date.now()}`;
+      try {
+        await fs.writeFile(tempPath, content, encoding);
+        await fs.move(tempPath, filePath);
+        console.log(`✅ App Service: Successfully wrote file: ${filePath} (${content.length} chars)`);
+      } catch (writeError) {
+        if (await fs.pathExists(tempPath)) {
+          await fs.remove(tempPath);
+        }
+        throw writeError;
+      }
+    } catch (error) {
+      console.error(`❌ App Service: Error writing file ${filePath}: ${error.message}`);
+      throw new Error(`Failed to write file ${filePath}: ${error.message}`);
+    }
+  }
+
+  /**
+   * Safely stringify JSON with error handling
+   */
+  private safeJSONStringify(object: any, indent: number = 2): string {
+    try {
+      if (object === null || object === undefined) {
+        return '{}';
+      }
+      return JSON.stringify(object, null, indent);
+    } catch (error) {
+      console.warn(`⚠️ App Service: JSON stringification failed: ${error.message}`);
+      return '{}';
+    }
   }
 }

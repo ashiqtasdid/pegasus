@@ -28,20 +28,19 @@ export class DiskReaderService {
           error: `Project not found: generated/${userId}/${pluginName}`
         };
       }
-      console.log(`✅ Disk Reader: Project directory exists`);
-
-      // Read project-info.json if it exists to get metadata
+      console.log(`✅ Disk Reader: Project directory exists`);      // Read project-info.json if it exists to get metadata
       const projectInfoPath = path.join(projectPath, 'project-info.json');
       let projectMetadata: any = {};
       
       console.log(`📄 Disk Reader: Checking for project metadata...`);
       if (await fs.pathExists(projectInfoPath)) {
         try {
-          const projectInfoContent = await fs.readFile(projectInfoPath, 'utf8');
-          projectMetadata = JSON.parse(projectInfoContent);
+          const projectInfoContent = await this.safeReadFile(projectInfoPath, 'utf8');
+          projectMetadata = this.safeJSONParse(projectInfoContent, {});
           console.log(`✅ Disk Reader: Project metadata loaded successfully`);
         } catch (error) {
           console.warn('⚠️ Disk Reader: Could not read project-info.json:', error.message);
+          projectMetadata = {};
         }
       } else {
         console.log(`ℹ️ Disk Reader: No project metadata file found, will detect from sources`);
@@ -114,9 +113,8 @@ export class DiskReaderService {
           }
         } else if (stat.isFile()) {
           const ext = path.extname(item).toLowerCase();
-          if (extensions.includes(ext)) {
-            try {
-              const content = await fs.readFile(fullPath, 'utf8');
+          if (extensions.includes(ext)) {            try {
+              const content = await this.safeReadFile(fullPath, 'utf8');
               const relativeFilePath = path.relative(basePath, fullPath).replace(/\\/g, '/');
               
               console.log(`📄 Disk Reader: Read file: ${relativeFilePath} (${content.length} chars)`);
@@ -267,8 +265,7 @@ export class DiskReaderService {
     try {
       const projectPath = path.join(process.cwd(), 'generated', userId, pluginName);
       const projectInfoPath = path.join(projectPath, 'project-info.json');
-      
-      if (!await fs.pathExists(projectInfoPath)) {
+        if (!await this.safePathExists(projectInfoPath)) {
         return {
           hasChanges: false,
           changedFiles: [],
@@ -277,57 +274,212 @@ export class DiskReaderService {
         };
       }
 
-      // Read original project info
-      const originalData = JSON.parse(await fs.readFile(projectInfoPath, 'utf8'));
-      const originalProject: PluginProject = originalData;
-      
-      // Read current project from disk
-      const currentResult = await this.readProjectFromDisk(userId, pluginName);
-      if (!currentResult.projectExists || !currentResult.pluginProject) {
-        throw new Error('Could not read current project');
-      }
-      
-      const currentProject = currentResult.pluginProject;
-      
-      // Compare files
-      const originalFiles = new Map(originalProject.files.map(f => [f.path, f.content]));
-      const currentFiles = new Map(currentProject.files.map(f => [f.path, f.content]));
-      
-      const changedFiles: string[] = [];
-      const newFiles: string[] = [];
-      const deletedFiles: string[] = [];
-      
-      // Check for changed and new files
-      for (const [path, content] of currentFiles) {
-        if (originalFiles.has(path)) {
-          if (originalFiles.get(path) !== content) {
-            changedFiles.push(path);
+      // Read original project info safely
+      try {
+        const originalDataString = await this.safeReadFile(projectInfoPath, 'utf8');
+        const originalData = this.safeJSONParse(originalDataString, null);
+        
+        if (!originalData) {
+          throw new Error('Invalid project info data');
+        }
+          const originalProject: PluginProject = originalData;
+        
+        // Read current project from disk
+        const currentResult = await this.readProjectFromDisk(userId, pluginName);
+        if (!currentResult.projectExists || !currentResult.pluginProject) {
+          throw new Error('Could not read current project');
+        }
+        
+        const currentProject = currentResult.pluginProject;
+        
+        // Compare files
+        const originalFiles = new Map(originalProject.files.map(f => [f.path, f.content]));
+        const currentFiles = new Map(currentProject.files.map(f => [f.path, f.content]));
+        
+        const changedFiles: string[] = [];
+        const newFiles: string[] = [];
+        const deletedFiles: string[] = [];
+          // Check for changed and new files
+        for (const [path, content] of currentFiles) {
+          if (originalFiles.has(path)) {
+            if (originalFiles.get(path) !== content) {
+              changedFiles.push(path as string);
+            }
+          } else {
+            newFiles.push(path as string);
           }
-        } else {
-          newFiles.push(path);
         }
-      }
-      
-      // Check for deleted files
-      for (const path of originalFiles.keys()) {
-        if (!currentFiles.has(path)) {
-          deletedFiles.push(path);
+        
+        // Check for deleted files
+        for (const path of originalFiles.keys()) {
+          if (!currentFiles.has(path)) {
+            deletedFiles.push(path as string);
+          }
         }
+        
+        const hasChanges = changedFiles.length > 0 || newFiles.length > 0 || deletedFiles.length > 0;
+        
+        return {
+          hasChanges,
+          originalProject,
+          currentProject,
+          changedFiles,
+          newFiles,
+          deletedFiles
+        };
+      } catch (readError) {
+        console.error(`❌ Disk Reader: Error reading project info: ${readError.message}`);
+        return {
+          hasChanges: false,
+          changedFiles: [],
+          newFiles: [],
+          deletedFiles: []
+        };
       }
-      
-      const hasChanges = changedFiles.length > 0 || newFiles.length > 0 || deletedFiles.length > 0;
-      
-      return {
-        hasChanges,
-        originalProject,
-        currentProject,
-        changedFiles,
-        newFiles,
-        deletedFiles
-      };
       
     } catch (error) {
       throw new Error(`Failed to compare projects: ${error.message}`);
+    }
+  }
+
+  /**
+   * Safely read a file with comprehensive error handling
+   */
+  private async safeReadFile(filePath: string, encoding: BufferEncoding = 'utf8'): Promise<string> {
+    try {
+      // Check if file exists and is readable
+      await fs.access(filePath, fs.constants.R_OK);
+      
+      // Get file stats to check if it's actually a file
+      const stats = await fs.stat(filePath);
+      if (!stats.isFile()) {
+        throw new Error(`Path is not a file: ${filePath}`);
+      }
+      
+      // Check file size (prevent reading extremely large files)
+      if (stats.size > 50 * 1024 * 1024) { // 50MB limit
+        throw new Error(`File too large: ${filePath} (${stats.size} bytes)`);
+      }
+      
+      // Read the file with timeout
+      const content = await fs.readFile(filePath, encoding);
+      
+      // Validate content
+      if (typeof content !== 'string') {
+        throw new Error(`File content is not a string: ${filePath}`);
+      }
+      
+      return content;
+    } catch (error) {
+      console.error(`❌ Disk Reader: Error reading file ${filePath}: ${error.message}`);
+      throw new Error(`Failed to read file ${filePath}: ${error.message}`);
+    }
+  }
+
+  /**
+   * Safely write a file with comprehensive error handling
+   */
+  private async safeWriteFile(filePath: string, content: string, encoding: BufferEncoding = 'utf8'): Promise<void> {
+    try {
+      // Ensure directory exists
+      await fs.ensureDir(path.dirname(filePath));
+      
+      // Validate content
+      if (typeof content !== 'string') {
+        content = String(content);
+      }
+      
+      // Create a temporary file first (atomic write)
+      const tempPath = `${filePath}.tmp.${Date.now()}`;
+      
+      try {
+        await fs.writeFile(tempPath, content, encoding);
+        await fs.move(tempPath, filePath);
+        console.log(`✅ Disk Reader: Successfully wrote file: ${filePath} (${content.length} chars)`);
+      } catch (writeError) {
+        // Clean up temp file if it exists
+        if (await fs.pathExists(tempPath)) {
+          await fs.remove(tempPath);
+        }
+        throw writeError;
+      }
+    } catch (error) {
+      console.error(`❌ Disk Reader: Error writing file ${filePath}: ${error.message}`);
+      throw new Error(`Failed to write file ${filePath}: ${error.message}`);
+    }
+  }
+
+  /**
+   * Safely parse JSON with fallback and error handling
+   */
+  private safeJSONParse<T>(jsonString: string, fallback: T): T {
+    if (!jsonString || typeof jsonString !== 'string' || jsonString.trim().length === 0) {
+      console.log(`⚠️ Disk Reader: Empty or invalid JSON string, using fallback`);
+      return fallback;
+    }
+    
+    try {
+      const trimmed = jsonString.trim();
+      
+      // Basic validation - must start with { or [
+      if (!trimmed.startsWith('{') && !trimmed.startsWith('[')) {
+        console.log(`⚠️ Disk Reader: JSON string doesn't start with { or [, using fallback`);
+        return fallback;
+      }
+      
+      const parsed = JSON.parse(trimmed);
+      
+      // Additional validation for parsed result
+      if (parsed === null || parsed === undefined) {
+        console.log(`⚠️ Disk Reader: Parsed JSON is null/undefined, using fallback`);
+        return fallback;
+      }
+      
+      return parsed;
+    } catch (error) {
+      console.warn(`⚠️ Disk Reader: JSON parsing failed: ${error.message}, using fallback`);
+      return fallback;
+    }
+  }
+
+  /**
+   * Safely stringify JSON with error handling
+   */
+  private safeJSONStringify(object: any, indent: number = 2): string {
+    try {
+      if (object === null || object === undefined) {
+        return '{}';
+      }
+      
+      return JSON.stringify(object, null, indent);
+    } catch (error) {
+      console.warn(`⚠️ Disk Reader: JSON stringification failed: ${error.message}`);
+      return '{}';
+    }
+  }
+
+  /**
+   * Safely check if a path exists with error handling
+   */
+  private async safePathExists(filePath: string): Promise<boolean> {
+    try {
+      return await fs.pathExists(filePath);
+    } catch (error) {
+      console.warn(`⚠️ Disk Reader: Error checking path existence for ${filePath}: ${error.message}`);
+      return false;
+    }
+  }
+
+  /**
+   * Safely ensure directory exists with error handling
+   */
+  private async safeEnsureDir(dirPath: string): Promise<boolean> {
+    try {
+      await fs.ensureDir(dirPath);
+      return true;
+    } catch (error) {
+      console.error(`❌ Disk Reader: Error ensuring directory ${dirPath}: ${error.message}`);
+      return false;
     }
   }
 }

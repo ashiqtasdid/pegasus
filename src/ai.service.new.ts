@@ -2,9 +2,6 @@ import { Injectable } from '@nestjs/common';
 import { OpenRouterClient, OpenRouterMessage, OpenRouterRequest, OpenRouterResponse } from './openrouter.client';
 import { AIPromptTemplates, PluginProject, PluginFile } from './ai-prompt-templates.service';
 
-// Re-export types for backward compatibility
-export { PluginProject, PluginFile } from './ai-prompt-templates.service';
-
 /**
  * AI Service - Modular service for Minecraft plugin generation using AI
  * 
@@ -16,23 +13,16 @@ export { PluginProject, PluginFile } from './ai-prompt-templates.service';
  */
 @Injectable()
 export class AiService {
+  // AI Model Configuration
+  // - Claude Sonnet 4: Used for complex code generation and fixes
+  // - Gemini Flash 1.5: Used for basic tasks like prompt enhancement
+  private readonly codeGenerationModel = 'anthropic/claude-sonnet-4';
+  private readonly promptEnhancementModel = 'google/gemini-flash-1.5';
+  
   constructor(
     private openRouterClient: OpenRouterClient,
     private promptTemplates: AIPromptTemplates
   ) {}
-
-  // AI Model Configuration with optimized settings for accuracy
-  private get modelConfigs() {
-    return this.promptTemplates.getModelConfigurations();
-  }
-  
-  private get codeGenerationModel() {
-    return this.modelConfigs.codeGeneration.model;
-  }
-  
-  private get promptEnhancementModel() {
-    return this.modelConfigs.promptEnhancement.model;
-  }
 
   /**
    * Generate plugin code using AI with robust parsing and fallback
@@ -58,14 +48,12 @@ export class AiService {
         content: this.promptTemplates.getPluginGenerationUserPrompt(pluginName, prompt)
       }
     ];
-      console.log(`🌐 AI Service: Calling OpenRouter API with Claude Sonnet 4 for code generation`);
-    const codeGenConfig = this.modelConfigs.codeGeneration;
+    
+    console.log(`🌐 AI Service: Calling OpenRouter API with Claude Sonnet 4 for code generation`);
     const response = await this.openRouterClient.chatCompletion({
-      model: codeGenConfig.model,
+      model: this.codeGenerationModel,
       messages,
-      max_tokens: codeGenConfig.max_tokens,
-      temperature: codeGenConfig.temperature,
-      top_p: codeGenConfig.top_p
+      max_tokens: 12000, // Allow large responses for complex plugins
     });
     
     console.log(`✅ AI Service: Received response from OpenRouter (${response.usage?.total_tokens || 'unknown'} tokens)`);
@@ -106,15 +94,13 @@ export class AiService {
         role: 'user',
         content: this.promptTemplates.getPromptEnhancementUserPrompt(originalPrompt)
       }
-    ];    
-    console.log(`🌐 AI Service: Calling OpenRouter API for prompt enhancement with Claude Sonnet 4`);
-    const promptEnhanceConfig = this.modelConfigs.promptEnhancement;
+    ];
+    
+    console.log(`🌐 AI Service: Calling OpenRouter API for prompt enhancement with Gemini Flash 1.5`);
     const response = await this.openRouterClient.chatCompletion({
-      model: promptEnhanceConfig.model,
+      model: this.promptEnhancementModel,
       messages,
-      temperature: promptEnhanceConfig.temperature,
-      max_tokens: promptEnhanceConfig.max_tokens,
-      top_p: promptEnhanceConfig.top_p
+      temperature: 0.5
     });
 
     const enhancedPrompt = response.choices[0]?.message?.content || originalPrompt;
@@ -534,168 +520,5 @@ export class AiService {
         }
       }
     }
-  }
-
-  /**
-   * Generate plugin code with enhanced accuracy through multi-stage validation
-   */
-  async generatePluginCodeWithValidation(prompt: string, pluginName: string): Promise<PluginProject> {
-    console.log(`🎯 AI Service: Starting enhanced plugin generation with validation for "${pluginName}"`);
-    
-    // Stage 1: Validate and enhance the prompt
-    const validation = this.promptTemplates.validatePromptParameters(pluginName, prompt);
-    if (!validation.isValid) {
-      throw new Error(`Invalid parameters: ${validation.errors.join(', ')}`);
-    }
-    
-    // Stage 2: Enhanced prompt processing
-    console.log(`🔧 AI Service: Enhancing prompt for better accuracy`);
-    const enhancedPrompt = await this.enhancePrompt(prompt);
-    
-    // Stage 3: Generate with enhanced prompt
-    console.log(`🤖 AI Service: Generating plugin with enhanced specifications`);
-    let project = await this.generatePluginCode(enhancedPrompt, pluginName);
-    
-    // Stage 4: Validate generated project
-    console.log(`✅ AI Service: Validating generated project`);
-    const projectValidation = await this.validateGeneratedProject(project, pluginName, enhancedPrompt);
-    
-    if (!projectValidation.isValid) {
-      console.log(`⚠️ AI Service: Project validation failed, attempting fixes`);
-      project = await this.fixProjectIssues(project, projectValidation.issues, pluginName, enhancedPrompt);
-    }
-    
-    console.log(`🎉 AI Service: Enhanced plugin generation completed successfully`);
-    return project;
-  }
-
-  /**
-   * Validate generated project for common issues and completeness
-   */
-  private async validateGeneratedProject(project: PluginProject, pluginName: string, prompt: string): Promise<{
-    isValid: boolean;
-    issues: string[];
-    suggestions: string[];
-  }> {
-    const issues: string[] = [];
-    const suggestions: string[] = [];
-    
-    console.log(`🔍 AI Service: Performing comprehensive project validation`);
-    
-    // Validate project structure
-    if (!project.files || project.files.length < 4) {
-      issues.push('Project missing required files (minimum: main class, plugin.yml, pom.xml, README.md)');
-    }
-    
-    // Validate main Java file
-    const javaFiles = project.files.filter(f => f.type === 'java' && f.path.includes('Plugin.java'));
-    if (javaFiles.length === 0) {
-      issues.push('No main plugin class found');
-    } else {
-      const mainClass = javaFiles[0];
-      if (!mainClass.content.includes('extends JavaPlugin')) {
-        issues.push('Main class does not extend JavaPlugin');
-      }
-      if (!mainClass.content.includes('onEnable()')) {
-        issues.push('Main class missing onEnable() method');
-      }
-      if (!mainClass.content.includes('onDisable()')) {
-        issues.push('Main class missing onDisable() method');
-      }
-      if (mainClass.content.includes('TODO') || mainClass.content.includes('FIXME')) {
-        issues.push('Main class contains placeholder text');
-      }
-    }
-    
-    // Validate plugin.yml
-    const pluginYml = project.files.find(f => f.path.includes('plugin.yml'));
-    if (!pluginYml) {
-      issues.push('plugin.yml file missing');
-    } else {
-      if (!pluginYml.content.includes('name:')) {
-        issues.push('plugin.yml missing name field');
-      }
-      if (!pluginYml.content.includes('main:')) {
-        issues.push('plugin.yml missing main class field');
-      }
-      if (!pluginYml.content.includes('version:')) {
-        issues.push('plugin.yml missing version field');
-      }
-      if (!pluginYml.content.includes('api-version:')) {
-        suggestions.push('Consider adding api-version field to plugin.yml');
-      }
-    }
-    
-    // Validate pom.xml
-    const pomXml = project.files.find(f => f.path.includes('pom.xml'));
-    if (!pomXml) {
-      issues.push('pom.xml file missing');
-    } else {
-      if (!pomXml.content.includes('spigot-api')) {
-        issues.push('pom.xml missing Spigot API dependency');
-      }
-      if (!pomXml.content.includes('maven-compiler-plugin')) {
-        suggestions.push('Consider adding Maven compiler plugin to pom.xml');
-      }
-    }
-    
-    // Validate content quality
-    const allContent = project.files.map(f => f.content).join('\n');
-    if (allContent.includes('TODO') || allContent.includes('FIXME') || allContent.includes('PLACEHOLDER')) {
-      issues.push('Generated code contains placeholder text');
-    }
-    
-    // Check for prompt requirement fulfillment
-    if (prompt.toLowerCase().includes('command') && !allContent.toLowerCase().includes('oncommand')) {
-      issues.push('Plugin requirements mention commands but no command handling found');
-    }
-    
-    if (prompt.toLowerCase().includes('event') && !allContent.toLowerCase().includes('event')) {
-      issues.push('Plugin requirements mention events but no event handling found');
-    }
-    
-    const isValid = issues.length === 0;
-    console.log(`📊 AI Service: Validation complete - ${isValid ? 'PASSED' : 'FAILED'} (${issues.length} issues, ${suggestions.length} suggestions)`);
-    
-    return { isValid, issues, suggestions };
-  }
-
-  /**
-   * Attempt to fix common project issues
-   */
-  private async fixProjectIssues(project: PluginProject, issues: string[], pluginName: string, prompt: string): Promise<PluginProject> {
-    console.log(`🔧 AI Service: Attempting to fix ${issues.length} project issues`);
-    
-    // If critical issues exist, regenerate with more specific prompts
-    const criticalIssues = issues.filter(issue => 
-      issue.includes('missing') || 
-      issue.includes('extends JavaPlugin') || 
-      issue.includes('placeholder')
-    );
-    
-    if (criticalIssues.length > 0) {
-      console.log(`⚠️ AI Service: Critical issues found, using fallback generation`);
-      const fallbackProject = this.promptTemplates.getFallbackProjectTemplate(pluginName, prompt);
-      
-      // Merge non-critical files from original generation
-      const mergedFiles = [...fallbackProject.files];
-      project.files.forEach(file => {
-        if (!file.content.includes('TODO') && !file.content.includes('FIXME')) {
-          const existingIndex = mergedFiles.findIndex(f => f.path === file.path);
-          if (existingIndex >= 0) {
-            mergedFiles[existingIndex] = file;
-          } else {
-            mergedFiles.push(file);
-          }
-        }
-      });
-      
-      return {
-        ...fallbackProject,
-        files: mergedFiles
-      };
-    }
-    
-    return project;
   }
 }
