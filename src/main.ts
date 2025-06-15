@@ -12,13 +12,19 @@ async function bootstrap() {
   
   const app = await NestFactory.create<NestExpressApplication>(AppModule);
   console.log(`✅ NestJS application created successfully`);
-  
-  // Enable CORS for frontend development
+    // Enable CORS for frontend development
   app.enableCors();
   console.log('✅ CORS enabled for frontend development');
-    // Serve static files from public directory
-  app.useStaticAssets(join(__dirname, '..', '..', 'public'));
-  console.log('📁 Static files enabled from public directory');
+  
+  // Serve static files from public directory
+  // In development: __dirname is dist/src, so we go up two levels
+  // In Docker: __dirname is /app/dist/src, so we go to /app/public
+  const publicPath = process.env.NODE_ENV === 'production' 
+    ? join(process.cwd(), 'public')
+    : join(__dirname, '..', '..', 'public');
+  
+  app.useStaticAssets(publicPath);
+  console.log(`📁 Static files enabled from: ${publicPath}`);
   
   // Check if generated directory exists
   const generatedDir = join(process.cwd(), 'generated');

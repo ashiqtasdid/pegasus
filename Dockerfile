@@ -31,6 +31,7 @@ RUN apk add --no-cache \
 # Set Java environment variables
 ENV JAVA_HOME=/usr/lib/jvm/java-17-openjdk
 ENV PATH="$JAVA_HOME/bin:$PATH"
+ENV NODE_ENV=production
 
 # Set working directory
 WORKDIR /app
