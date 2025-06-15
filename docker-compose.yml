@@ -1,16 +1,17 @@
 version: '3.8'
 
-services:  pegasus:
+services:
+  pegasus:
     build: .
     command: ["npm", "run", "start:prod"]
     ports:
-      - "3000:3000"    env_file:
+      - "3000:3000"
+    env_file:
       - .env.production
     environment:
       - NODE_ENV=production
       - PORT=3000
     volumes:
-      # Persist generated plugins
       - generated_plugins:/app/generated
     restart: unless-stopped
     healthcheck:
