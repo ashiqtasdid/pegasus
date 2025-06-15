@@ -8,6 +8,7 @@ import { DiskReaderService } from './disk-reader.service';
 import { OpenRouterClient } from './openrouter.client';
 import { AIPromptTemplates } from './ai-prompt-templates.service';
 import { ConfigService } from '@nestjs/config';
+import { ChatService } from './chat.service';
 
 describe('AppController', () => {
   let appController: AppController;
@@ -57,6 +58,15 @@ describe('AppController', () => {
           provide: ConfigService,
           useValue: {
             get: jest.fn().mockReturnValue('test-api-key'),
+          },
+        },
+        {
+          provide: ChatService,
+          useValue: {
+            checkUserHasPlugin: jest.fn(),
+            getUserPlugins: jest.fn(),
+            addPluginToUser: jest.fn(),
+            removePluginFromUser: jest.fn(),
           },
         },
       ],

@@ -16,9 +16,8 @@ async function bootstrap() {
   // Enable CORS for frontend development
   app.enableCors();
   console.log('✅ CORS enabled for frontend development');
-  
-  // Serve static files from public directory
-  app.useStaticAssets(join(__dirname, '..', 'public'));
+    // Serve static files from public directory
+  app.useStaticAssets(join(__dirname, '..', '..', 'public'));
   console.log('📁 Static files enabled from public directory');
   
   // Check if generated directory exists

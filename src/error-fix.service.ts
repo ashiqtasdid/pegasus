@@ -47,7 +47,7 @@ export interface CompilationErrorContext {
 
 @Injectable()
 export class ErrorFixService {
-  private readonly MAX_FIX_ITERATIONS = 3;
+  private readonly MAX_FIX_ITERATIONS = 5;
   // AI Model Configuration - Same as AI Service
   private readonly errorFixModel = 'anthropic/claude-sonnet-4'; // Claude Sonnet 4 for error analysis and fixes
 

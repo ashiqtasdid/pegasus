@@ -116,9 +116,7 @@
                             </p>
                         </div>
                     </div>
-                </div>
-
-                <!-- Results Section -->
+                </div>                <!-- Results Section -->
                 <div id="resultsSection" class="hidden mt-8">
                     <div class="bg-white overflow-hidden shadow rounded-lg">
                         <div class="px-4 py-5 sm:p-6">
@@ -133,24 +131,112 @@
                     </div>
                 </div>
 
-                <!-- Project Explorer -->
-                <div id="projectSection" class="hidden mt-8">
+                <!-- AI Chat Assistant -->
+                <div id="chatSection" class="mt-8">
                     <div class="bg-white overflow-hidden shadow rounded-lg">
                         <div class="px-4 py-5 sm:p-6">
                             <div class="flex justify-between items-center mb-4">
                                 <h3 class="text-lg leading-6 font-medium text-gray-900">
-                                    <i class="fas fa-folder-open text-blue-500 mr-2"></i>
-                                    Project Files
+                                    <i class="fas fa-robot text-purple-500 mr-2"></i>
+                                    AI Assistant
                                 </h3>
-                                <button 
-                                    id="refreshProjectBtn"
-                                    class="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm leading-4 font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
-                                >
-                                    <i class="fas fa-sync-alt mr-2"></i>
-                                    Refresh
-                                </button>
+                                <div class="flex items-center space-x-2">
+                                    <span class="text-sm text-gray-500" id="chatContext">General Questions</span>
+                                    <button 
+                                        id="clearChatBtn"
+                                        class="inline-flex items-center px-2 py-1 border border-gray-300 shadow-sm text-xs leading-4 font-medium rounded text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+                                        title="Clear chat history"
+                                    >
+                                        <i class="fas fa-trash text-xs"></i>
+                                    </button>
+                                </div>
                             </div>
-                            <div id="projectFiles" class="space-y-3">
+                            
+                            <!-- Chat Messages Container -->
+                            <div id="chatMessages" class="h-64 overflow-y-auto border border-gray-200 rounded-md p-4 bg-gray-50 mb-4 space-y-3">
+                                <div class="text-center text-sm text-gray-500 py-8">
+                                    <i class="fas fa-comments text-2xl text-gray-300 mb-2"></i>
+                                    <p>Ask me anything about your Minecraft plugin!</p>
+                                    <p class="text-xs mt-1">I can help with code explanations, troubleshooting, and Minecraft development questions.</p>
+                                </div>
+                            </div>
+                            
+                            <!-- Chat Input -->
+                            <div class="flex space-x-3">
+                                <div class="flex-1">
+                                    <textarea 
+                                        id="chatInput" 
+                                        rows="2" 
+                                        class="shadow-sm focus:ring-indigo-500 focus:border-indigo-500 block w-full sm:text-sm border-gray-300 rounded-md resize-none"
+                                        placeholder="Ask about your plugin, Minecraft development, or get help with your code..."
+                                    ></textarea>
+                                </div>
+                                <div class="flex flex-col space-y-2">
+                                    <button 
+                                        id="sendChatBtn"
+                                        class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                                        disabled
+                                    >
+                                        <i class="fas fa-paper-plane mr-2"></i>
+                                        Send
+                                    </button>
+                                </div>
+                            </div>
+                            
+                            <!-- Quick Questions -->
+                            <div class="mt-4">
+                                <div class="text-xs text-gray-500 mb-2">Quick questions:</div>
+                                <div class="flex flex-wrap gap-2">
+                                    <button class="quick-question-btn px-3 py-1 text-xs bg-gray-100 hover:bg-gray-200 rounded-full text-gray-700 transition-colors" data-question="How does this plugin work?">
+                                        How does this plugin work?
+                                    </button>
+                                    <button class="quick-question-btn px-3 py-1 text-xs bg-gray-100 hover:bg-gray-200 rounded-full text-gray-700 transition-colors" data-question="What are the main features?">
+                                        What are the main features?
+                                    </button>
+                                    <button class="quick-question-btn px-3 py-1 text-xs bg-gray-100 hover:bg-gray-200 rounded-full text-gray-700 transition-colors" data-question="How do I configure this plugin?">
+                                        How do I configure this?
+                                    </button>
+                                    <button class="quick-question-btn px-3 py-1 text-xs bg-gray-100 hover:bg-gray-200 rounded-full text-gray-700 transition-colors" data-question="What permissions does this plugin use?">
+                                        What permissions does this use?
+                                    </button>
+                                    <button class="quick-question-btn px-3 py-1 text-xs bg-gray-100 hover:bg-gray-200 rounded-full text-gray-700 transition-colors" data-question="Explain the code structure">
+                                        Explain the code structure
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Compact VS Code Style File Explorer -->
+                <div id="projectSection" class="hidden mt-8">
+                    <div class="bg-white overflow-hidden shadow rounded-lg">
+                        <div class="px-3 py-2 border-b border-gray-200">
+                            <div class="flex justify-between items-center">
+                                <h3 class="text-sm font-medium text-gray-900 flex items-center">
+                                    <i class="fas fa-folder text-blue-500 mr-2 text-sm"></i>
+                                    Project Explorer
+                                </h3>
+                                <div class="flex items-center space-x-1">
+                                    <button 
+                                        id="toggleFileViewBtn"
+                                        class="inline-flex items-center px-2 py-1 text-xs text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded"
+                                        title="Toggle view mode"
+                                    >
+                                        <i class="fas fa-compress-alt text-xs"></i>
+                                    </button>
+                                    <button 
+                                        id="refreshProjectBtn"
+                                        class="inline-flex items-center px-2 py-1 text-xs text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded"
+                                        title="Refresh files"
+                                    >
+                                        <i class="fas fa-sync-alt text-xs"></i>
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="bg-gray-50">
+                            <div id="projectFiles" class="max-h-80 overflow-y-auto">
                                 <!-- Project files will be loaded here -->
                             </div>
                         </div>

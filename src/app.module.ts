@@ -8,6 +8,7 @@ import { AIPromptTemplates } from './ai-prompt-templates.service';
 import { MavenService } from './maven.service';
 import { DiskReaderService } from './disk-reader.service';
 import { ErrorFixService } from './error-fix.service';
+import { ChatService } from './chat.service';
 
 @Module({
   imports: [
@@ -23,7 +24,8 @@ import { ErrorFixService } from './error-fix.service';
     AIPromptTemplates,
     MavenService, 
     DiskReaderService, 
-    ErrorFixService
+    ErrorFixService,
+    ChatService
   ],
 })
 export class AppModule {}

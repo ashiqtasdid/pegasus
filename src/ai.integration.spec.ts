@@ -140,11 +140,9 @@ describe('AI Service Integration Tests', () => {
         'Simple plugin',
         'Create a complex plugin with multiple features including commands, events, and GUI management.',
         'A'.repeat(5000) // Long but within limit
-      ];
-
-      const invalidCases = [
+      ];      const invalidCases = [
         '', // Empty
-        'A'.repeat(10001) // Too long
+        'A'.repeat(50001) // Too long (over 50k limit)
       ];
 
       validCases.forEach(req => {

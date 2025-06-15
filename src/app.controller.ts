@@ -3,6 +3,7 @@ import { AppService } from './app.service';
 import { PluginProject } from './ai.service';
 import { MavenService, CompilationResult } from './maven.service';
 import { DiskReaderService, DiskProjectInfo } from './disk-reader.service';
+import { ChatService } from './chat.service';
 import { Response } from 'express';
 import { join } from 'path';
 import * as fs from 'fs-extra';
@@ -12,7 +13,8 @@ import * as path from 'path';
 export class AppController {  constructor(
     private readonly appService: AppService,
     private readonly mavenService: MavenService,
-    private readonly diskReaderService: DiskReaderService
+    private readonly diskReaderService: DiskReaderService,
+    private readonly chatService: ChatService
   ) {}  @Get()
   getRoot(@Res() res: Response) {
     console.log('📍 Root route accessed - redirecting to /app');
@@ -410,5 +412,160 @@ export class AppController {  constructor(
       projectPath: result.projectPath,
       lastModified: result.lastModified?.toISOString()
     };
+  }
+
+  /**
+   * Check if a user has a specific plugin
+   */
+  @Post('/chat/check-user-plugin')
+  async checkUserHasPlugin(@Body() body: { pluginName: string; username: string }) {
+    console.log('💬 Chat endpoint: Check user plugin requested:', body);
+    
+    try {
+      const hasPlugin = await this.chatService.checkUserHasPlugin(body.pluginName, body.username);
+      
+      console.log(`💬 Chat endpoint: User ${body.username} has plugin ${body.pluginName}: ${hasPlugin}`);
+      
+      return {
+        success: true,
+        hasPlugin,
+        pluginName: body.pluginName,
+        username: body.username,
+        message: hasPlugin 
+          ? `User ${body.username} has plugin ${body.pluginName}`
+          : `User ${body.username} does not have plugin ${body.pluginName}`
+      };
+    } catch (error) {
+      console.error('❌ Chat endpoint: Error checking user plugin:', error);
+      return {
+        success: false,
+        hasPlugin: false,
+        error: error.message || 'Failed to check user plugin'
+      };
+    }
+  }
+
+  /**
+   * Get user's plugin list
+   */
+  @Post('/chat/get-user-plugins')
+  async getUserPlugins(@Body() body: { username: string }) {
+    console.log('📋 Chat endpoint: Get user plugins requested:', body);
+    
+    try {
+      const plugins = await this.chatService.getUserPlugins(body.username);
+      
+      console.log(`📋 Chat endpoint: User ${body.username} has ${plugins.length} plugins`);
+      
+      return {
+        success: true,
+        username: body.username,
+        plugins,
+        count: plugins.length
+      };
+    } catch (error) {
+      console.error('❌ Chat endpoint: Error getting user plugins:', error);
+      return {
+        success: false,
+        plugins: [],
+        error: error.message || 'Failed to get user plugins'
+      };
+    }
+  }
+
+  /**
+   * Add plugin to user
+   */
+  @Post('/chat/add-user-plugin')
+  async addPluginToUser(@Body() body: { pluginName: string; username: string }) {
+    console.log('➕ Chat endpoint: Add plugin to user requested:', body);
+    
+    try {
+      const success = await this.chatService.addPluginToUser(body.pluginName, body.username);
+      
+      console.log(`➕ Chat endpoint: Add plugin ${body.pluginName} to user ${body.username}: ${success}`);
+      
+      return {
+        success,
+        pluginName: body.pluginName,
+        username: body.username,
+        message: success 
+          ? `Plugin ${body.pluginName} added to user ${body.username}`
+          : `Failed to add plugin ${body.pluginName} to user ${body.username}`
+      };
+    } catch (error) {
+      console.error('❌ Chat endpoint: Error adding plugin to user:', error);
+      return {
+        success: false,
+        error: error.message || 'Failed to add plugin to user'
+      };
+    }
+  }
+
+  /**
+   * Remove plugin from user
+   */
+  @Post('/chat/remove-user-plugin')
+  async removePluginFromUser(@Body() body: { pluginName: string; username: string }) {
+    console.log('➖ Chat endpoint: Remove plugin from user requested:', body);
+    
+    try {
+      const success = await this.chatService.removePluginFromUser(body.pluginName, body.username);
+      
+      console.log(`➖ Chat endpoint: Remove plugin ${body.pluginName} from user ${body.username}: ${success}`);
+      
+      return {
+        success,
+        pluginName: body.pluginName,        username: body.username,
+        message: success 
+          ? `Plugin ${body.pluginName} removed from user ${body.username}`
+          : `Failed to remove plugin ${body.pluginName} from user ${body.username}`
+      };
+    } catch (error) {
+      console.error('❌ Chat endpoint: Error removing plugin from user:', error);
+      return {
+        success: false,
+        error: error.message || 'Failed to remove plugin from user'
+      };
+    }
+  }
+
+  /**
+   * New Chat System - Process chat messages with AI intent analysis
+   */
+  @Post('/chat/message')
+  async processChatMessage(@Body() body: any) {
+    console.log('💬 Chat endpoint: Process chat message requested:', body);
+    
+    try {
+      if (!body.message || typeof body.message !== 'string' || body.message.trim().length === 0) {
+        return {
+          success: false,
+          error: 'Message is required and must be a non-empty string'
+        };
+      }
+
+      if (!body.username || typeof body.username !== 'string' || body.username.trim().length === 0) {
+        return {
+          success: false,
+          error: 'Username is required and must be a non-empty string'
+        };
+      }
+
+      const response = await this.chatService.processChat(
+        body.message.trim(),
+        body.username.trim(),
+        body.pluginName?.trim() || undefined
+      );
+      
+      console.log(`💬 Chat endpoint: Chat processed successfully for user ${body.username}`);
+      return response;
+    } catch (error) {
+      console.error('❌ Chat endpoint: Error processing chat message:', error);
+      return {
+        success: false,
+        error: error.message || 'Failed to process chat message'
+      };
+    }
   }
 }
