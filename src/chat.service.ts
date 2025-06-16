@@ -8,6 +8,16 @@ import { MavenService } from './maven.service';
 @Injectable()
 export class ChatService {
   private readonly generatedPath = path.join(process.cwd(), 'generated');
+  
+  // Plugin files cache with modification time tracking
+  private readonly pluginFilesCache = new Map<string, {
+    files: {[path: string]: string};
+    lastModified: number;
+    cacheTime: number;
+  }>();
+  
+  // Cache TTL in milliseconds (5 minutes)
+  private readonly CACHE_TTL = 5 * 60 * 1000;
 
   constructor(
     private readonly openRouterClient: OpenRouterClient,
@@ -616,11 +626,12 @@ public class PlayerJoinListener implements Listener {
           console.error(`❌ Chat Service: Failed to execute ${operation.type} operation: ${error.message}`);
           results.push({ success: false, operation: operation.type, error: error.message });
         }
-      }
-
-      // Regenerate plugin index to reflect changes
+      }      // Regenerate plugin index to reflect changes
       console.log(`🔄 Chat Service: Regenerating plugin index after modifications`);
       await this.generatePluginIndex(pluginName, username);
+
+      // Clear cache for the modified plugin
+      this.clearPluginFilesCache(username, pluginName);
 
       // Attempt to compile the modified plugin
       console.log(`🔨 Chat Service: Compiling modified plugin`);
@@ -1039,5 +1050,165 @@ public class PlayerJoinListener implements Listener {
     console.log(`✅ Chat Service: Plugin "${normalizedPluginName}" removed from user "${normalizedUsername}" (placeholder)`);
     
     return true;
+  }
+  /**
+   * Get plugin files for Monaco Editor with caching
+   * @param username - The username
+   * @param pluginName - The plugin name
+   * @returns Promise<{[path: string]: string}> - Object with file paths as keys and content as values
+   */
+  async getPluginFilesForEditor(username: string, pluginName: string): Promise<{[path: string]: string}> {
+    console.log(`📁 Chat Service: Getting plugin files for Monaco Editor - user: "${username}", plugin: "${pluginName}"`);
+    
+    if (!username || username.trim().length === 0) {
+      console.log('❌ Chat Service: Username is required');
+      throw new Error('Username is required');
+    }
+
+    if (!pluginName || pluginName.trim().length === 0) {
+      console.log('❌ Chat Service: Plugin name is required');
+      throw new Error('Plugin name is required');
+    }
+
+    const normalizedUsername = username.trim();
+    const normalizedPluginName = pluginName.trim();
+    
+    const pluginPath = path.join(this.generatedPath, normalizedUsername, normalizedPluginName);
+    const cacheKey = `${normalizedUsername}:${normalizedPluginName}`;
+    
+    // Check if plugin directory exists
+    if (!await fs.pathExists(pluginPath)) {
+      console.log(`❌ Chat Service: Plugin directory not found at: ${pluginPath}`);
+      throw new Error(`Plugin "${normalizedPluginName}" not found for user "${normalizedUsername}"`);
+    }
+
+    try {
+      // Get the latest modification time of the plugin directory
+      const currentModTime = await this.getDirectoryLastModified(pluginPath);
+      const currentTime = Date.now();
+      
+      // Check if we have a valid cache entry
+      const cachedEntry = this.pluginFilesCache.get(cacheKey);
+      
+      if (cachedEntry && 
+          cachedEntry.lastModified >= currentModTime && 
+          (currentTime - cachedEntry.cacheTime) < this.CACHE_TTL) {
+        console.log(`🚀 Chat Service: Using cached plugin files (cached ${Math.round((currentTime - cachedEntry.cacheTime) / 1000)}s ago)`);
+        console.log(`📋 Chat Service: Cached files: ${Object.keys(cachedEntry.files).join(', ')}`);
+        return cachedEntry.files;
+      }
+
+      // Cache miss or expired - read files from disk
+      console.log(`📂 Chat Service: Reading plugin files from disk (cache ${cachedEntry ? 'expired/outdated' : 'miss'})`);
+      
+      // Get all files with their content
+      const files = await this.getFilesWithContent(pluginPath);
+      const result: {[path: string]: string} = {};
+      
+      // Convert to Monaco Editor format
+      for (const file of files) {
+        // Use forward slashes for web compatibility
+        const normalizedPath = file.path.replace(/\\/g, '/');
+        result[normalizedPath] = file.content;
+      }
+      
+      // Update cache
+      this.pluginFilesCache.set(cacheKey, {
+        files: result,
+        lastModified: currentModTime,
+        cacheTime: currentTime
+      });
+      
+      console.log(`✅ Chat Service: Retrieved and cached ${Object.keys(result).length} files for Monaco Editor`);
+      console.log(`📋 Chat Service: Files: ${Object.keys(result).join(', ')}`);
+      
+      return result;
+    } catch (error) {
+      console.error(`❌ Chat Service: Failed to get plugin files: ${error.message}`);
+      throw new Error(`Failed to read plugin files: ${error.message}`);
+    }
+  }
+
+  /**
+   * Get the latest modification time of a directory (recursively)
+   * @param dirPath - Directory path to check
+   * @returns Promise<number> - Latest modification time in milliseconds
+   */
+  private async getDirectoryLastModified(dirPath: string): Promise<number> {
+    let latestTime = 0;
+    
+    const scanDirectory = async (currentPath: string) => {
+      try {
+        const items = await fs.readdir(currentPath);
+        
+        for (const item of items) {
+          const itemPath = path.join(currentPath, item);
+          const stat = await fs.stat(itemPath);
+          
+          // Update latest time if this item is newer
+          if (stat.mtimeMs > latestTime) {
+            latestTime = stat.mtimeMs;
+          }
+          
+          // Recursively check subdirectories
+          if (stat.isDirectory()) {
+            await scanDirectory(itemPath);
+          }
+        }
+      } catch (error) {
+        // Skip directories we can't read
+      }
+    };
+    
+    try {
+      // Check the directory itself
+      const dirStat = await fs.stat(dirPath);
+      latestTime = dirStat.mtimeMs;
+      
+      // Scan all contents
+      await scanDirectory(dirPath);
+    } catch (error) {
+      // Return 0 if we can't check the directory
+      return 0;
+    }
+    
+    return latestTime;
+  }
+
+  /**
+   * Clear cache for a specific plugin or all plugins
+   * @param username - Optional username to clear cache for specific user
+   * @param pluginName - Optional plugin name to clear cache for specific plugin
+   */
+  clearPluginFilesCache(username?: string, pluginName?: string): void {
+    if (username && pluginName) {
+      const cacheKey = `${username.trim()}:${pluginName.trim()}`;
+      this.pluginFilesCache.delete(cacheKey);
+      console.log(`🗑️ Chat Service: Cleared cache for plugin "${pluginName}" by user "${username}"`);
+    } else if (username) {
+      // Clear all plugins for a specific user
+      const userPrefix = `${username.trim()}:`;
+      for (const key of this.pluginFilesCache.keys()) {
+        if (key.startsWith(userPrefix)) {
+          this.pluginFilesCache.delete(key);
+        }
+      }
+      console.log(`🗑️ Chat Service: Cleared all plugin cache for user "${username}"`);
+    } else {
+      // Clear entire cache
+      this.pluginFilesCache.clear();
+      console.log(`🗑️ Chat Service: Cleared entire plugin files cache`);
+    }
+  }
+
+  /**
+   * Get cache statistics
+   * @returns Object with cache stats
+   */
+  getCacheStats(): { totalEntries: number; cacheKeys: string[] } {
+    return {
+      totalEntries: this.pluginFilesCache.size,
+      cacheKeys: Array.from(this.pluginFilesCache.keys())
+    };
   }
 }

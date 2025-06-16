@@ -32,6 +32,7 @@ export class AIPromptTemplates {
 - DO NOT include comments, explanations, or any text outside the JSON.
 - ALL strings must be properly escaped (quotes: \\", newlines: \\\\n, backslashes: \\\\\\\\).
 - File content must be complete, correct, and production-ready. NO placeholders, TODOs, or incomplete code.
+- The code should be like this, com.pegasus.pluginname, where pluginname is the name of the plugin in lowercase, with no spaces or special characters.
 
 === REQUIRED JSON STRUCTURE (EXACT) ===
 {

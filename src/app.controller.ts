@@ -25,7 +25,47 @@ export class AppController {  constructor(
   getApp(@Res() res: Response) {
     console.log('🎮 Web UI accessed - serving main application');
     return res.sendFile(join(process.cwd(), 'public', 'index.html'));
-  }  @Post('plugin/generate')
+  }
+
+  @Get('health')
+  getHealth() {
+    console.log('🏥 Health check requested');
+    
+    const uptime = process.uptime();
+    const timestamp = new Date().toISOString();
+    const memoryUsage = process.memoryUsage();
+    
+    const healthInfo = {
+      status: 'healthy',
+      timestamp,
+      uptime: {
+        seconds: Math.floor(uptime),
+        human: this.formatUptime(uptime)
+      },
+      memory: {
+        used: Math.round(memoryUsage.heapUsed / 1024 / 1024 * 100) / 100, // MB
+        total: Math.round(memoryUsage.heapTotal / 1024 / 1024 * 100) / 100, // MB
+        external: Math.round(memoryUsage.external / 1024 / 1024 * 100) / 100 // MB
+      },
+      version: process.version,
+      platform: process.platform,
+      pid: process.pid
+    };
+    
+    console.log(`✅ Health check completed - Uptime: ${healthInfo.uptime.human}, Memory: ${healthInfo.memory.used}MB`);
+    return healthInfo;
+  }
+
+  @Get('health/simple')
+  getSimpleHealth() {
+    console.log('🏥 Simple health check requested');
+    return { 
+      status: 'ok', 
+      timestamp: new Date().toISOString() 
+    };
+  }
+
+  @Post('plugin/generate')
   async generatePlugin(
     @Body('prompt') prompt: string,
     @Body('userId') userId: string,
@@ -567,5 +607,137 @@ export class AppController {  constructor(
         error: error.message || 'Failed to process chat message'
       };
     }
+  }
+
+  /**
+   * Get plugin files for Monaco Editor
+   */
+  @Post('/plugin/files')
+  async getPluginFiles(@Body() body: any) {
+    console.log('📁 Plugin files endpoint: Get plugin files requested:', body);
+    
+    try {
+      if (!body.userId || typeof body.userId !== 'string' || body.userId.trim().length === 0) {
+        return {
+          success: false,
+          error: 'userId is required and must be a non-empty string'
+        };
+      }
+
+      if (!body.pluginName || typeof body.pluginName !== 'string' || body.pluginName.trim().length === 0) {
+        return {
+          success: false,
+          error: 'pluginName is required and must be a non-empty string'
+        };
+      }
+
+      const files = await this.chatService.getPluginFilesForEditor(
+        body.userId.trim(),
+        body.pluginName.trim()
+      );
+      
+      console.log(`📁 Plugin files endpoint: Retrieved ${Object.keys(files).length} files for user ${body.userId}, plugin ${body.pluginName}`);
+      
+      return {
+        success: true,
+        files
+      };
+    } catch (error) {
+      console.error('❌ Plugin files endpoint: Error getting plugin files:', error);
+      return {
+        success: false,
+        error: error.message || 'Failed to get plugin files'
+      };
+    }
+  }
+
+  /**
+   * Clear plugin files cache
+   */
+  @Post('/plugin/clear-cache')
+  async clearPluginFilesCache(@Body() body: any) {
+    console.log('🗑️ Cache clear endpoint: Clear cache requested:', body);
+    
+    try {
+      if (body.userId && body.pluginName) {
+        // Clear cache for specific plugin
+        this.chatService.clearPluginFilesCache(body.userId.trim(), body.pluginName.trim());
+        console.log(`🗑️ Cache clear endpoint: Cleared cache for plugin ${body.pluginName} by user ${body.userId}`);
+        return {
+          success: true,
+          message: `Cache cleared for plugin "${body.pluginName}" by user "${body.userId}"`
+        };
+      } else if (body.userId) {
+        // Clear cache for all plugins by user
+        this.chatService.clearPluginFilesCache(body.userId.trim());
+        console.log(`🗑️ Cache clear endpoint: Cleared cache for all plugins by user ${body.userId}`);
+        return {
+          success: true,
+          message: `Cache cleared for all plugins by user "${body.userId}"`
+        };
+      } else {
+        // Clear entire cache
+        this.chatService.clearPluginFilesCache();
+        console.log(`🗑️ Cache clear endpoint: Cleared entire cache`);
+        return {
+          success: true,
+          message: 'Entire plugin files cache cleared'
+        };
+      }
+    } catch (error) {
+      console.error('❌ Cache clear endpoint: Error clearing cache:', error);
+      return {
+        success: false,
+        error: error.message || 'Failed to clear cache'
+      };
+    }
+  }
+
+  /**
+   * Get cache statistics
+   */
+  @Get('/plugin/cache-stats')
+  async getCacheStats() {
+    console.log('📊 Cache stats endpoint: Get cache stats requested');
+    
+    try {
+      const stats = this.chatService.getCacheStats();
+      
+      console.log(`📊 Cache stats endpoint: Retrieved stats - ${stats.totalEntries} cached entries`);
+      
+      return {
+        success: true,
+        stats: {
+          totalEntries: stats.totalEntries,
+          cacheKeys: stats.cacheKeys,
+          cacheSize: stats.totalEntries
+        }
+      };
+    } catch (error) {
+      console.error('❌ Cache stats endpoint: Error getting cache stats:', error);
+      return {
+        success: false,
+        error: error.message || 'Failed to get cache stats'
+      };
+    }
+  }
+  /**
+   * Format uptime in human readable format
+   * @param seconds - Uptime in seconds
+   * @returns Human readable uptime string
+   */
+  private formatUptime(seconds: number): string {
+    const days = Math.floor(seconds / 86400);
+    const hours = Math.floor((seconds % 86400) / 3600);
+    const minutes = Math.floor((seconds % 3600) / 60);
+    const secs = Math.floor(seconds % 60);
+    
+    const parts: string[] = [];
+    if (days > 0) parts.push(`${days}d`);
+    if (hours > 0) parts.push(`${hours}h`);
+    if (minutes > 0) parts.push(`${minutes}m`);
+    parts.push(`${secs}s`);
+    
+    return parts.join(' ');
   }
 }
