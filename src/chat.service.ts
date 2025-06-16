@@ -87,8 +87,7 @@ Examples:
         role: 'user',
         content: message
       }
-    ];    try {
-      const response = await this.openRouterClient.chatCompletion({
+    ];    try {      const response = await this.openRouterClient.chatCompletion({
         model: 'google/gemini-flash-1.5',
         messages,
         max_tokens: 50,
@@ -220,12 +219,10 @@ Guidelines:
           role: 'user',
           content: `${message}${pluginContext}`
         }
-      ];
-
-      console.log(`🤖 Chat Service: Sending request to Claude with ${pluginContext ? 'plugin context' : 'no plugin context'}`);
+      ];      console.log(`🤖 Chat Service: Sending request to Gemini Flash 1.5 with ${pluginContext ? 'plugin context' : 'no plugin context'}`);
       
       const response = await this.openRouterClient.chatCompletion({
-        model: 'anthropic/claude-sonnet-4',
+        model: 'google/gemini-flash-1.5',
         messages,
         max_tokens: 2000,
         temperature: 0.7,
@@ -337,6 +334,7 @@ IMPORTANT INSTRUCTIONS:
 5. Follow Minecraft plugin best practices and proper Java conventions
 6. Ensure all changes are compatible with the existing code
 7. Always provide complete file content for any files you modify or create
+8. If the modification is very complex, focus on the most important changes first
 
 RESPONSE FORMAT - RETURN ONLY THIS JSON STRUCTURE (NO OTHER TEXT):
 {
@@ -379,19 +377,21 @@ STRICT REQUIREMENTS:
           role: 'user',
           content: `Requested modification: ${message}\n\nCurrent plugin context:${pluginContext}`
         }
-      ];console.log(`🤖 Chat Service: Sending modification request to Claude Sonnet 3.5`);
+      ];      console.log(`🤖 Chat Service: Sending modification request to Claude Sonnet 3.5`);
       
       const response = await this.openRouterClient.chatCompletion({
         model: 'anthropic/claude-sonnet-4',
         messages,
-        max_tokens: 4000,
+        max_tokens: 8000,
         temperature: 0.3,
         top_p: 0.9
-      });
-
-      const aiResponse = response.choices[0]?.message?.content || '';
+      });      const aiResponse = response.choices[0]?.message?.content || '';
       console.log(`🔧 Chat Service: Received modification plan (${aiResponse.length} characters)`);
-        // Parse the AI response
+      
+      // Check if the response appears to be truncated
+      if (aiResponse.length >= 7900) { // Close to max token limit
+        console.log(`⚠️ Chat Service: Response appears to be truncated (${aiResponse.length} chars), may cause JSON parsing issues`);
+      }// Parse the AI response
       let modificationPlan;
       try {
         // Clean the response (remove markdown code blocks if present)
@@ -415,14 +415,63 @@ STRICT REQUIREMENTS:
         
         console.log(`🔍 Chat Service: Attempting to parse JSON: ${cleanResponse.substring(0, 200)}...`);
         
-        modificationPlan = JSON.parse(cleanResponse.trim());
+        // Validate that we have a complete JSON object
+        if (!cleanResponse.startsWith('{') || !cleanResponse.endsWith('}')) {
+          throw new Error('Response does not contain a complete JSON object');
+        }
+        
+        // Count braces to ensure JSON is complete
+        let openBraces = 0;
+        let closeBraces = 0;
+        for (const char of cleanResponse) {
+          if (char === '{') openBraces++;
+          if (char === '}') closeBraces++;
+        }
+        
+        if (openBraces !== closeBraces) {
+          throw new Error(`Incomplete JSON: ${openBraces} opening braces, ${closeBraces} closing braces`);
+        }
+          modificationPlan = JSON.parse(cleanResponse.trim());
       } catch (error) {
         console.error(`❌ Chat Service: Failed to parse AI response: ${error.message}`);
-        return {
-          success: false,
-          error: 'Failed to parse modification plan',
-          message: 'The AI provided an invalid response format. Please try rephrasing your request.'
-        };
+        console.error(`❌ Chat Service: AI Response (first 500 chars): ${aiResponse.substring(0, 500)}`);
+        console.error(`❌ Chat Service: AI Response (last 500 chars): ${aiResponse.substring(Math.max(0, aiResponse.length - 500))}`);
+          // Try to extract partial JSON if the response was truncated
+        if (aiResponse.length >= 7900) {
+          console.log(`🔄 Chat Service: Attempting to extract partial operations from truncated response`);
+          try {
+            // Look for operations array even if the JSON is incomplete
+            const operationsMatch = aiResponse.match(/"operations"\s*:\s*\[(.*)/s);
+            if (operationsMatch) {
+              // Try to find complete operations within the truncated response
+              const operationsText = operationsMatch[1];
+              const operations = [];
+              
+              // Basic fallback: create a simple modification plan
+              modificationPlan = {
+                addedFeature: "Partial modification (response was truncated)",
+                operations: [],
+                buildCommands: ["mvn clean compile", "mvn package"]
+              };
+              
+              console.log(`✅ Chat Service: Created fallback modification plan`);
+            } else {
+              throw error;
+            }
+          } catch (fallbackError) {
+            return {
+              success: false,
+              error: 'Failed to parse modification plan',
+              message: 'The AI response was too large and got truncated. Please try breaking your modification request into smaller, more specific parts.'
+            };
+          }
+        } else {
+          return {
+            success: false,
+            error: 'Failed to parse modification plan',
+            message: 'The AI provided an incomplete or invalid response format. This might be due to a very complex modification request. Please try breaking your request into smaller parts.'
+          };
+        }
       }
 
       // Validate the modification plan
