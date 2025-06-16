@@ -3,7 +3,8 @@ version: '3.8'
 services:
   pegasus:
     build: .
-    command: ["npm", "run", "start:prod"]    ports:
+    command: ["npm", "run", "start:prod"]
+    ports:
       - "3001:3001"
     env_file:
       - .env.production
@@ -12,7 +13,8 @@ services:
       - PORT=3001
     volumes:
       - generated_plugins:/app/generated
-    restart: unless-stopped    healthcheck:
+    restart: unless-stopped
+    healthcheck:
       test: ["CMD", "node", "-e", "require('http').get('http://localhost:3001', (res) => { process.exit(res.statusCode === 200 ? 0 : 1) })"]
       interval: 30s
       timeout: 10s
