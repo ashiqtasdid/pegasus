@@ -4,6 +4,7 @@ import { PluginProject } from './ai.service';
 import { MavenService, CompilationResult } from './maven.service';
 import { DiskReaderService, DiskProjectInfo } from './disk-reader.service';
 import { ChatService } from './chat.service';
+import { PluginDbService } from './plugin-db.service';
 import { Response } from 'express';
 import { join } from 'path';
 import * as fs from 'fs-extra';
@@ -14,8 +15,9 @@ export class AppController {  constructor(
     private readonly appService: AppService,
     private readonly mavenService: MavenService,
     private readonly diskReaderService: DiskReaderService,
-    private readonly chatService: ChatService
-  ) {}  @Get()
+    private readonly chatService: ChatService,
+    private readonly pluginDbService: PluginDbService
+  ) {}@Get()
   getRoot(@Res() res: Response) {
     console.log('📍 Root route accessed - redirecting to /app');
     return res.redirect('/app');
@@ -720,8 +722,7 @@ export class AppController {  constructor(
         error: error.message || 'Failed to get cache stats'
       };
     }
-  }
-  /**
+  }  /**
    * Format uptime in human readable format
    * @param seconds - Uptime in seconds
    * @returns Human readable uptime string
@@ -739,5 +740,354 @@ export class AppController {  constructor(
     parts.push(`${secs}s`);
     
     return parts.join(' ');
+  }
+
+  /**
+   * Get plugin from MongoDB
+   */
+  @Post('/plugin/db/get')
+  async getPluginFromDb(@Body() body: any) {
+    console.log('🗄️ MongoDB endpoint: Get plugin from database requested:', body);
+    
+    try {
+      if (!body.userId || typeof body.userId !== 'string' || body.userId.trim().length === 0) {
+        return {
+          success: false,
+          error: 'userId is required and must be a non-empty string'
+        };
+      }
+
+      if (!body.pluginName || typeof body.pluginName !== 'string' || body.pluginName.trim().length === 0) {
+        return {
+          success: false,
+          error: 'pluginName is required and must be a non-empty string'
+        };
+      }
+
+      const plugin = await this.pluginDbService.getPlugin(
+        body.userId.trim(),
+        body.pluginName.trim()
+      );
+      
+      if (!plugin) {
+        return {
+          success: false,
+          error: `Plugin "${body.pluginName}" not found in database for user "${body.userId}"`
+        };
+      }
+      
+      console.log(`🗄️ MongoDB endpoint: Retrieved plugin from database with ${plugin.files.length} files`);
+      
+      return {
+        success: true,
+        plugin: {
+          _id: plugin._id,
+          userId: plugin.userId,
+          pluginName: plugin.pluginName,
+          description: plugin.description,
+          minecraftVersion: plugin.minecraftVersion,
+          dependencies: plugin.dependencies,
+          metadata: plugin.metadata,
+          totalFiles: plugin.totalFiles,
+          totalSize: plugin.totalSize,
+          createdAt: plugin.createdAt,
+          updatedAt: plugin.updatedAt,
+          lastSyncedAt: plugin.lastSyncedAt
+        },
+        files: plugin.files
+      };
+    } catch (error) {
+      console.error('❌ MongoDB endpoint: Error getting plugin from database:', error);
+      return {
+        success: false,
+        error: error.message || 'Failed to get plugin from database'
+      };
+    }
+  }
+
+  /**
+   * Get all plugins for a user from MongoDB
+   */
+  @Post('/plugin/db/list')
+  async getUserPluginsFromDb(@Body() body: any) {
+    console.log('🗄️ MongoDB endpoint: Get user plugins from database requested:', body);
+    
+    try {
+      if (!body.userId || typeof body.userId !== 'string' || body.userId.trim().length === 0) {
+        return {
+          success: false,
+          error: 'userId is required and must be a non-empty string'
+        };
+      }
+
+      const plugins = await this.pluginDbService.getUserPlugins(body.userId.trim());
+      
+      console.log(`🗄️ MongoDB endpoint: Retrieved ${plugins.length} plugins from database for user ${body.userId}`);
+      
+      // Return summary without full file contents for list view
+      const pluginSummaries = plugins.map(plugin => ({
+        _id: plugin._id,
+        userId: plugin.userId,
+        pluginName: plugin.pluginName,
+        description: plugin.description,
+        minecraftVersion: plugin.minecraftVersion,
+        dependencies: plugin.dependencies,
+        metadata: plugin.metadata,
+        totalFiles: plugin.totalFiles,
+        totalSize: plugin.totalSize,
+        createdAt: plugin.createdAt,
+        updatedAt: plugin.updatedAt,
+        lastSyncedAt: plugin.lastSyncedAt
+      }));
+      
+      return {
+        success: true,
+        plugins: pluginSummaries,
+        count: plugins.length
+      };
+    } catch (error) {
+      console.error('❌ MongoDB endpoint: Error getting user plugins from database:', error);
+      return {
+        success: false,
+        error: error.message || 'Failed to get user plugins from database'
+      };
+    }
+  }
+
+  /**
+   * Sync plugin with MongoDB
+   */
+  @Post('/plugin/db/sync')
+  async syncPluginWithDb(@Body() body: any) {
+    console.log('🔄 MongoDB endpoint: Sync plugin with database requested:', body);
+    
+    try {
+      if (!body.userId || typeof body.userId !== 'string' || body.userId.trim().length === 0) {
+        return {
+          success: false,
+          error: 'userId is required and must be a non-empty string'
+        };
+      }
+
+      if (!body.pluginName || typeof body.pluginName !== 'string' || body.pluginName.trim().length === 0) {
+        return {
+          success: false,
+          error: 'pluginName is required and must be a non-empty string'
+        };
+      }
+
+      const userId = body.userId.trim();
+      const pluginName = body.pluginName.trim();
+      
+      // Check if plugin exists on disk
+      const pluginPath = path.join(process.cwd(), 'generated', userId, pluginName);
+      
+      if (!await fs.pathExists(pluginPath)) {
+        return {
+          success: false,
+          error: `Plugin "${pluginName}" not found on disk for user "${userId}"`
+        };
+      }
+
+      // Create sync DTO
+      const pluginDto = {
+        _id: body._id || this.generatePluginId(userId, pluginName),
+        userId,
+        pluginName,
+        description: body.description || `A Minecraft plugin named ${pluginName}`,
+        minecraftVersion: body.minecraftVersion || '1.20',
+        dependencies: body.dependencies || [],
+        metadata: body.metadata || {
+          author: 'Pegasus AI',
+          version: '1.0.0',
+          mainClass: `com.pegasus.${pluginName.toLowerCase()}.Main`,
+          apiVersion: '1.20'
+        },
+        diskPath: pluginPath
+      };
+
+      const plugin = await this.pluginDbService.syncWithDisk(pluginDto);
+      
+      console.log(`🔄 MongoDB endpoint: Plugin synced with database successfully`);
+      
+      return {
+        success: true,
+        message: `Plugin "${pluginName}" synced with database`,
+        plugin: {
+          _id: plugin._id,
+          userId: plugin.userId,
+          pluginName: plugin.pluginName,
+          totalFiles: plugin.totalFiles,
+          totalSize: plugin.totalSize,
+          lastSyncedAt: plugin.lastSyncedAt
+        }
+      };
+    } catch (error) {
+      console.error('❌ MongoDB endpoint: Error syncing plugin with database:', error);
+      return {
+        success: false,
+        error: error.message || 'Failed to sync plugin with database'
+      };
+    }
+  }
+
+  /**
+   * Get MongoDB database statistics
+   */
+  @Get('/plugin/db/stats')
+  async getDbStats() {
+    console.log('📊 MongoDB endpoint: Get database stats requested');
+    
+    try {
+      const stats = await this.pluginDbService.getDbStats();
+      
+      console.log(`📊 MongoDB endpoint: Retrieved database stats - ${stats.activePlugins} active plugins`);
+      
+      return {
+        success: true,
+        stats
+      };
+    } catch (error) {
+      console.error('❌ MongoDB endpoint: Error getting database stats:', error);
+      return {
+        success: false,
+        error: error.message || 'Failed to get database stats'
+      };
+    }
+  }
+
+  /**
+   * Force sync all plugins with MongoDB
+   */
+  @Post('/plugin/db/sync-all')
+  async syncAllPluginsWithDb(@Body() body: any) {
+    console.log('🔄 MongoDB endpoint: Sync all plugins with database requested:', body);
+    
+    try {
+      const userId = body.userId?.trim();
+      const generatedPath = path.join(process.cwd(), 'generated');
+      
+      if (!await fs.pathExists(generatedPath)) {
+        return {
+          success: false,
+          error: 'No generated plugins directory found'
+        };
+      }
+
+      let syncedCount = 0;
+      let errorCount = 0;
+      const errors: string[] = [];
+
+      if (userId) {
+        // Sync plugins for specific user
+        const userPath = path.join(generatedPath, userId);
+        if (await fs.pathExists(userPath)) {
+          const pluginDirs = await fs.readdir(userPath);
+          
+          for (const pluginName of pluginDirs) {
+            const pluginPath = path.join(userPath, pluginName);
+            const stat = await fs.stat(pluginPath);
+            
+            if (stat.isDirectory()) {
+              try {
+                const pluginDto = {
+                  _id: this.generatePluginId(userId, pluginName),
+                  userId,
+                  pluginName,
+                  description: `A Minecraft plugin named ${pluginName}`,
+                  minecraftVersion: '1.20',
+                  dependencies: [],
+                  metadata: {
+                    author: 'Pegasus AI',
+                    version: '1.0.0',
+                    mainClass: `com.pegasus.${pluginName.toLowerCase()}.Main`,
+                    apiVersion: '1.20'
+                  },
+                  diskPath: pluginPath
+                };
+
+                await this.pluginDbService.syncWithDisk(pluginDto);
+                syncedCount++;
+                console.log(`✅ Synced plugin: ${userId}/${pluginName}`);
+              } catch (error) {
+                errorCount++;
+                errors.push(`${userId}/${pluginName}: ${error.message}`);
+                console.error(`❌ Failed to sync plugin ${userId}/${pluginName}:`, error.message);
+              }
+            }
+          }
+        }
+      } else {
+        // Sync all plugins for all users
+        const userDirs = await fs.readdir(generatedPath);
+        
+        for (const userDir of userDirs) {
+          const userPath = path.join(generatedPath, userDir);
+          const userStat = await fs.stat(userPath);
+          
+          if (userStat.isDirectory()) {
+            const pluginDirs = await fs.readdir(userPath);
+            
+            for (const pluginName of pluginDirs) {
+              const pluginPath = path.join(userPath, pluginName);
+              const stat = await fs.stat(pluginPath);
+              
+              if (stat.isDirectory()) {
+                try {
+                  const pluginDto = {
+                    _id: this.generatePluginId(userDir, pluginName),
+                    userId: userDir,
+                    pluginName,
+                    description: `A Minecraft plugin named ${pluginName}`,
+                    minecraftVersion: '1.20',
+                    dependencies: [],
+                    metadata: {
+                      author: 'Pegasus AI',
+                      version: '1.0.0',
+                      mainClass: `com.pegasus.${pluginName.toLowerCase()}.Main`,
+                      apiVersion: '1.20'
+                    },
+                    diskPath: pluginPath
+                  };
+
+                  await this.pluginDbService.syncWithDisk(pluginDto);
+                  syncedCount++;
+                  console.log(`✅ Synced plugin: ${userDir}/${pluginName}`);
+                } catch (error) {
+                  errorCount++;
+                  errors.push(`${userDir}/${pluginName}: ${error.message}`);
+                  console.error(`❌ Failed to sync plugin ${userDir}/${pluginName}:`, error.message);
+                }
+              }
+            }
+          }
+        }
+      }
+      
+      console.log(`🔄 MongoDB endpoint: Bulk sync completed - ${syncedCount} synced, ${errorCount} errors`);
+      
+      return {
+        success: true,
+        message: `Bulk sync completed: ${syncedCount} plugins synced${errorCount > 0 ? `, ${errorCount} errors` : ''}`,
+        syncedCount,
+        errorCount,
+        errors: errorCount > 0 ? errors : undefined
+      };
+    } catch (error) {
+      console.error('❌ MongoDB endpoint: Error syncing all plugins with database:', error);
+      return {
+        success: false,
+        error: error.message || 'Failed to sync all plugins with database'
+      };
+    }
+  }
+
+  /**
+   * Generate a unique plugin ID
+   */
+  private generatePluginId(userId: string, pluginName: string): string {
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '');
+    const hash = Buffer.from(`${userId}:${pluginName}:${timestamp}`).toString('base64url').substring(0, 24);
+    return hash;
   }
 }

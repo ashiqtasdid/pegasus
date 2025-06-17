@@ -1,17 +1,19 @@
 import { Injectable } from '@nestjs/common';
 import * as fs from 'fs-extra';
 import * as path from 'path';
-import { AiService, PluginProject } from './ai.service';
+import { AiService, PluginProject, PluginFile } from './ai.service';
 import { MavenService } from './maven.service';
 import { ErrorFixService } from './error-fix.service';
 import { DiskReaderService } from './disk-reader.service';
+import { PluginDbService } from './plugin-db.service';
 
 @Injectable()
 export class AppService {  constructor(
     private aiService: AiService,
     private mavenService: MavenService,
     private errorFixService: ErrorFixService,
-    private diskReaderService: DiskReaderService
+    private diskReaderService: DiskReaderService,
+    private pluginDbService: PluginDbService
   ) {}
 
   getHello(): string {
@@ -146,9 +148,13 @@ export class AppService {  constructor(
       const duration = Date.now() - startTime;
       const nameInfo = name ? ` with name: ${name}` : ` with auto-generated name: ${pluginName}`;
       const filesList = pluginProject.files.map(f => `- ${f.path} (${f.type})`).join('\n');
-      
-      console.log(`🎉 App Service: Plugin generation completed in ${duration}ms`);
+        console.log(`🎉 App Service: Plugin generation completed in ${duration}ms`);
       console.log(`📦 App Service: Generated project "${pluginProject.projectName}" for Minecraft ${pluginProject.minecraftVersion}`);
+      
+      // Sync with MongoDB in background
+      this.syncPluginWithMongoDb(userId, pluginName, pluginPath, pluginProject, prompt).catch(error => {
+        console.warn(`⚠️ App Service: MongoDB sync failed (continuing anyway): ${error.message}`);
+      });
       
       return `Plugin project generated with AI assistance!\n\nProject: ${pluginProject.projectName}\nMinecraft Version: ${pluginProject.minecraftVersion}\nUser: ${userId}${nameInfo}\n\nGenerated files:\n${filesList}\n- project-info.json (project metadata)\n\nBuild Instructions: ${pluginProject.buildInstructions}\nFiles location: ${pluginPath}`;
     } catch (error) {
@@ -375,7 +381,6 @@ export class AppService {  constructor(
       throw new Error(`Failed to write file ${filePath}: ${error.message}`);
     }
   }
-
   /**
    * Safely stringify JSON with error handling
    */
@@ -389,5 +394,83 @@ export class AppService {  constructor(
       console.warn(`⚠️ App Service: JSON stringification failed: ${error.message}`);
       return '{}';
     }
+  }
+
+  /**
+   * Sync plugin with MongoDB database
+   */
+  private async syncPluginWithMongoDb(
+    userId: string, 
+    pluginName: string, 
+    pluginPath: string, 
+    pluginProject: PluginProject, 
+    originalPrompt: string
+  ): Promise<void> {
+    console.log(`🗄️ App Service: Syncing plugin with MongoDB - user: "${userId}", plugin: "${pluginName}"`);
+    
+    try {      // Extract metadata from plugin project
+      const pluginDto = {
+        _id: this.generatePluginId(userId, pluginName),
+        userId,
+        pluginName,
+        description: originalPrompt || `A Minecraft plugin named ${pluginName}`,
+        minecraftVersion: pluginProject.minecraftVersion || '1.20',
+        dependencies: pluginProject.dependencies || [],
+        metadata: {
+          author: 'Pegasus AI',
+          version: '1.0.0',
+          mainClass: this.extractMainClassFromFiles(pluginProject.files, pluginName),
+          apiVersion: pluginProject.minecraftVersion || '1.20'
+        },
+        diskPath: pluginPath
+      };
+
+      await this.pluginDbService.syncWithDisk(pluginDto);
+      console.log(`✅ App Service: Plugin synced with MongoDB successfully`);
+      
+    } catch (error) {
+      console.error(`❌ App Service: Failed to sync plugin with MongoDB: ${error.message}`, error.stack);
+      // Don't throw - let the main process continue
+    }
+  }
+  /**
+   * Generate a unique plugin ID
+   */
+  private generatePluginId(userId: string, pluginName: string): string {
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '');
+    const hash = Buffer.from(`${userId}:${pluginName}:${timestamp}`).toString('base64url').substring(0, 24);
+    return hash;
+  }
+
+  /**
+   * Extract main class from plugin files
+   */
+  private extractMainClassFromFiles(files: PluginFile[], pluginName: string): string {
+    // Look for plugin.yml and extract main class
+    const pluginYml = files.find(f => f.path.endsWith('plugin.yml'));
+    if (pluginYml) {
+      const match = pluginYml.content.match(/main:\s*['"]?([^'"\n\r]+)['"]?/i);
+      if (match) {
+        return match[1].trim();
+      }
+    }
+
+    // Fallback: look for main plugin class file
+    const mainFile = files.find(f => 
+      f.path.endsWith('.java') && 
+      (f.path.toLowerCase().includes('plugin') || f.path.toLowerCase().includes('main'))
+    );
+    
+    if (mainFile) {
+      // Extract package and class name from Java file
+      const packageMatch = mainFile.content.match(/package\s+([^;]+);/);
+      const classMatch = mainFile.content.match(/public\s+(?:final\s+)?class\s+(\w+)/);
+      
+      if (packageMatch && classMatch) {
+        return `${packageMatch[1].trim()}.${classMatch[1].trim()}`;
+      }
+    }
+
+    return `com.pegasus.${pluginName.toLowerCase()}.Main`;
   }
 }

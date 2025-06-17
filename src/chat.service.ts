@@ -4,6 +4,7 @@ import * as path from 'path';
 import { OpenRouterClient, OpenRouterMessage } from './openrouter.client';
 import { ErrorFixService } from './error-fix.service';
 import { MavenService } from './maven.service';
+import { PluginDbService } from './plugin-db.service';
 
 @Injectable()
 export class ChatService {
@@ -18,11 +19,11 @@ export class ChatService {
   
   // Cache TTL in milliseconds (5 minutes)
   private readonly CACHE_TTL = 5 * 60 * 1000;
-
   constructor(
     private readonly openRouterClient: OpenRouterClient,
     private readonly errorFixService: ErrorFixService,
-    private readonly mavenService: MavenService
+    private readonly mavenService: MavenService,
+    private readonly pluginDbService: PluginDbService
   ) {}
 
   /**
@@ -1050,9 +1051,8 @@ public class PlayerJoinListener implements Listener {
     console.log(`✅ Chat Service: Plugin "${normalizedPluginName}" removed from user "${normalizedUsername}" (placeholder)`);
     
     return true;
-  }
-  /**
-   * Get plugin files for Monaco Editor with caching
+  }  /**
+   * Get plugin files for Monaco Editor with MongoDB sync and caching
    * @param username - The username
    * @param pluginName - The plugin name
    * @returns Promise<{[path: string]: string}> - Object with file paths as keys and content as values
@@ -1083,7 +1083,35 @@ public class PlayerJoinListener implements Listener {
     }
 
     try {
-      // Get the latest modification time of the plugin directory
+      // Step 1: Check if MongoDB sync is needed
+      const needsSync = await this.pluginDbService.needsSync(normalizedUsername, normalizedPluginName, pluginPath);
+      
+      if (needsSync) {
+        console.log(`🔄 Chat Service: Plugin needs sync with MongoDB`);
+        await this.syncPluginWithDatabase(normalizedUsername, normalizedPluginName, pluginPath);
+      }
+
+      // Step 2: Try to get files from MongoDB first
+      try {
+        const files = await this.pluginDbService.getPluginFilesForEditor(normalizedUsername, normalizedPluginName);
+        console.log(`🗄️ Chat Service: Retrieved ${Object.keys(files).length} files from MongoDB`);
+        console.log(`📋 Chat Service: Files: ${Object.keys(files).join(', ')}`);
+        
+        // Update in-memory cache as well
+        const currentTime = Date.now();
+        const currentModTime = await this.getDirectoryLastModified(pluginPath);
+        this.pluginFilesCache.set(cacheKey, {
+          files,
+          lastModified: currentModTime,
+          cacheTime: currentTime
+        });
+        
+        return files;
+      } catch (dbError) {
+        console.warn(`⚠️ Chat Service: Failed to get files from MongoDB, falling back to disk: ${dbError.message}`);
+      }
+
+      // Step 3: Fallback to in-memory cache and disk
       const currentModTime = await this.getDirectoryLastModified(pluginPath);
       const currentTime = Date.now();
       
@@ -1098,7 +1126,7 @@ public class PlayerJoinListener implements Listener {
         return cachedEntry.files;
       }
 
-      // Cache miss or expired - read files from disk
+      // Step 4: Read from disk as last resort
       console.log(`📂 Chat Service: Reading plugin files from disk (cache ${cachedEntry ? 'expired/outdated' : 'miss'})`);
       
       // Get all files with their content
@@ -1112,7 +1140,7 @@ public class PlayerJoinListener implements Listener {
         result[normalizedPath] = file.content;
       }
       
-      // Update cache
+      // Update in-memory cache
       this.pluginFilesCache.set(cacheKey, {
         files: result,
         lastModified: currentModTime,
@@ -1121,6 +1149,11 @@ public class PlayerJoinListener implements Listener {
       
       console.log(`✅ Chat Service: Retrieved and cached ${Object.keys(result).length} files for Monaco Editor`);
       console.log(`📋 Chat Service: Files: ${Object.keys(result).join(', ')}`);
+      
+      // Try to update MongoDB in background (don't wait for it)
+      this.syncPluginWithDatabase(normalizedUsername, normalizedPluginName, pluginPath).catch(error => {
+        console.warn(`⚠️ Chat Service: Background MongoDB sync failed: ${error.message}`);
+      });
       
       return result;
     } catch (error) {
@@ -1200,7 +1233,6 @@ public class PlayerJoinListener implements Listener {
       console.log(`🗑️ Chat Service: Cleared entire plugin files cache`);
     }
   }
-
   /**
    * Get cache statistics
    * @returns Object with cache stats
@@ -1210,5 +1242,173 @@ public class PlayerJoinListener implements Listener {
       totalEntries: this.pluginFilesCache.size,
       cacheKeys: Array.from(this.pluginFilesCache.keys())
     };
+  }
+
+  /**
+   * Sync plugin with MongoDB database
+   * @param username - The username
+   * @param pluginName - The plugin name
+   * @param pluginPath - The disk path to the plugin
+   */
+  private async syncPluginWithDatabase(username: string, pluginName: string, pluginPath: string): Promise<void> {
+    console.log(`🔄 Chat Service: Syncing plugin with MongoDB - user: "${username}", plugin: "${pluginName}"`);
+    
+    try {
+      // Create plugin DTO for database
+      const pluginDto = {
+        _id: this.generatePluginId(username, pluginName),
+        userId: username,
+        pluginName: pluginName,
+        description: await this.extractPluginDescription(pluginPath),
+        minecraftVersion: await this.extractMinecraftVersion(pluginPath),
+        dependencies: await this.extractDependencies(pluginPath),
+        metadata: await this.extractPluginMetadata(pluginPath),
+        diskPath: pluginPath
+      };
+
+      await this.pluginDbService.syncWithDisk(pluginDto);
+      console.log(`✅ Chat Service: Plugin synced with MongoDB successfully`);
+      
+      // Clear in-memory cache to force refresh on next request
+      const cacheKey = `${username}:${pluginName}`;
+      this.pluginFilesCache.delete(cacheKey);
+      
+    } catch (error) {
+      console.error(`❌ Chat Service: Failed to sync plugin with MongoDB: ${error.message}`, error.stack);
+      throw error;
+    }
+  }
+
+  /**
+   * Generate a unique plugin ID
+   */
+  private generatePluginId(username: string, pluginName: string): string {
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '');
+    const hash = Buffer.from(`${username}:${pluginName}:${timestamp}`).toString('base64url').substring(0, 24);
+    return hash;
+  }
+
+  /**
+   * Extract plugin description from plugin.yml or README
+   */
+  private async extractPluginDescription(pluginPath: string): Promise<string> {
+    try {      // Try plugin.yml first
+      const pluginYmlPath = path.join(pluginPath, 'src', 'main', 'resources', 'plugin.yml');
+      if (await fs.pathExists(pluginYmlPath)) {
+        const content = await fs.readFile(pluginYmlPath, 'utf-8');
+        const match = content.match(/description:\s*['"]?([^'"\n\r]+)['"]?/i);
+        if (match) {
+          return match[1].trim();
+        }
+      }
+
+      // Try README.md
+      const readmePath = path.join(pluginPath, 'README.md');
+      if (await fs.pathExists(readmePath)) {
+        const content = await fs.readFile(readmePath, 'utf-8');
+        const lines = content.split('\n').filter(line => line.trim().length > 0);
+        if (lines.length > 1) {
+          return lines[1].replace(/^#+\s*/, '').trim(); // Remove markdown headers
+        }
+      }
+
+      return `A Minecraft plugin named ${path.basename(pluginPath)}`;
+    } catch (error) {
+      return `A Minecraft plugin named ${path.basename(pluginPath)}`;
+    }
+  }
+
+  /**
+   * Extract Minecraft version from plugin.yml or pom.xml
+   */
+  private async extractMinecraftVersion(pluginPath: string): Promise<string> {
+    try {      // Try plugin.yml first
+      const pluginYmlPath = path.join(pluginPath, 'src', 'main', 'resources', 'plugin.yml');
+      if (await fs.pathExists(pluginYmlPath)) {
+        const content = await fs.readFile(pluginYmlPath, 'utf-8');
+        const match = content.match(/api-version:\s*['"]?([^'"\n\r]+)['"]?/i);
+        if (match) {
+          return match[1].trim();
+        }
+      }
+
+      // Try pom.xml
+      const pomPath = path.join(pluginPath, 'pom.xml');
+      if (await fs.pathExists(pomPath)) {
+        const content = await fs.readFile(pomPath, 'utf-8');
+        const match = content.match(/<version>([^<]*(?:1\.\d+[^<]*?))<\/version>/i);
+        if (match) {
+          return match[1].trim();
+        }
+      }
+
+      return '1.20';
+    } catch (error) {
+      return '1.20';
+    }
+  }
+
+  /**
+   * Extract dependencies from pom.xml
+   */
+  private async extractDependencies(pluginPath: string): Promise<string[]> {
+    try {
+      const pomPath = path.join(pluginPath, 'pom.xml');
+      if (await fs.pathExists(pomPath)) {
+        const content = await fs.readFile(pomPath, 'utf-8');
+        const dependencies: string[] = [];
+          // Extract dependency names
+        const matches = content.matchAll(/<artifactId>([^<]+)<\/artifactId>/g);
+        for (const match of matches) {
+          const artifact = match[1].trim();
+          if (artifact !== path.basename(pluginPath).toLowerCase()) {
+            dependencies.push(artifact);
+          }
+        }
+        
+        return dependencies;
+      }
+
+      return [];
+    } catch (error) {
+      return [];
+    }
+  }
+
+  /**
+   * Extract plugin metadata from plugin.yml
+   */
+  private async extractPluginMetadata(pluginPath: string): Promise<{
+    author: string;
+    version: string;
+    mainClass: string;
+    apiVersion: string;
+  }> {
+    try {
+      const pluginYmlPath = path.join(pluginPath, 'src', 'main', 'resources', 'plugin.yml');
+      if (await fs.pathExists(pluginYmlPath)) {
+        const content = await fs.readFile(pluginYmlPath, 'utf-8');
+          const author = content.match(/author:\s*['"]?([^'"\n\r]+)['"]?/i)?.[1]?.trim() || 'Unknown';
+        const version = content.match(/version:\s*['"]?([^'"\n\r]+)['"]?/i)?.[1]?.trim() || '1.0.0';
+        const mainClass = content.match(/main:\s*['"]?([^'"\n\r]+)['"]?/i)?.[1]?.trim() || 'Main';
+        const apiVersion = content.match(/api-version:\s*['"]?([^'"\n\r]+)['"]?/i)?.[1]?.trim() || '1.20';
+        
+        return { author, version, mainClass, apiVersion };
+      }
+
+      return {
+        author: 'Unknown',
+        version: '1.0.0',
+        mainClass: 'Main',
+        apiVersion: '1.20'
+      };
+    } catch (error) {
+      return {
+        author: 'Unknown',
+        version: '1.0.0',
+        mainClass: 'Main',
+        apiVersion: '1.20'
+      };
+    }
   }
 }
