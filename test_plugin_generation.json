@@ -1,5 +1,0 @@
-{
-  "prompt": "Create a simple teleportation plugin that allows players to set a home location and teleport back to it. Include commands /sethome and /home with basic permission checks.",
-  "userId": "test-user-demo",
-  "pluginName": "SimpleHome"
-}

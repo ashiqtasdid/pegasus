@@ -1,4 +1,12 @@
-import { Controller, Get, Post, Body, Res, Param, NotFoundException } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Post,
+  Body,
+  Res,
+  Param,
+  NotFoundException,
+} from '@nestjs/common';
 import { AppService } from './app.service';
 import { PluginProject } from './ai.service';
 import { MavenService, CompilationResult } from './maven.service';
@@ -11,13 +19,15 @@ import * as fs from 'fs-extra';
 import * as path from 'path';
 
 @Controller()
-export class AppController {  constructor(
+export class AppController {
+  constructor(
     private readonly appService: AppService,
     private readonly mavenService: MavenService,
     private readonly diskReaderService: DiskReaderService,
     private readonly chatService: ChatService,
-    private readonly pluginDbService: PluginDbService
-  ) {}@Get()
+    private readonly pluginDbService: PluginDbService,
+  ) {}
+  @Get()
   getRoot(@Res() res: Response) {
     console.log('📍 Root route accessed - redirecting to /app');
     return res.redirect('/app');
@@ -32,117 +42,142 @@ export class AppController {  constructor(
   @Get('health')
   getHealth() {
     console.log('🏥 Health check requested');
-    
+
     const uptime = process.uptime();
     const timestamp = new Date().toISOString();
     const memoryUsage = process.memoryUsage();
-    
+
     const healthInfo = {
       status: 'healthy',
       timestamp,
       uptime: {
         seconds: Math.floor(uptime),
-        human: this.formatUptime(uptime)
+        human: this.formatUptime(uptime),
       },
       memory: {
-        used: Math.round(memoryUsage.heapUsed / 1024 / 1024 * 100) / 100, // MB
-        total: Math.round(memoryUsage.heapTotal / 1024 / 1024 * 100) / 100, // MB
-        external: Math.round(memoryUsage.external / 1024 / 1024 * 100) / 100 // MB
+        used: Math.round((memoryUsage.heapUsed / 1024 / 1024) * 100) / 100, // MB
+        total: Math.round((memoryUsage.heapTotal / 1024 / 1024) * 100) / 100, // MB
+        external: Math.round((memoryUsage.external / 1024 / 1024) * 100) / 100, // MB
       },
       version: process.version,
       platform: process.platform,
-      pid: process.pid
+      pid: process.pid,
     };
-    
-    console.log(`✅ Health check completed - Uptime: ${healthInfo.uptime.human}, Memory: ${healthInfo.memory.used}MB`);
+
+    console.log(
+      `✅ Health check completed - Uptime: ${healthInfo.uptime.human}, Memory: ${healthInfo.memory.used}MB`,
+    );
     return healthInfo;
   }
 
   @Get('health/simple')
   getSimpleHealth() {
     console.log('🏥 Simple health check requested');
-    return { 
-      status: 'ok', 
-      timestamp: new Date().toISOString() 
+    return {
+      status: 'ok',
+      timestamp: new Date().toISOString(),
     };
   }
-
   @Post('plugin/generate')
   async generatePlugin(
     @Body('prompt') prompt: string,
     @Body('userId') userId: string,
     @Body('name') name?: string,
-    @Body('autoCompile') autoCompile: boolean = true
+    @Body('autoCompile') autoCompile: boolean = true,
+    @Body('complexity') complexity: number = 5,
   ): Promise<string> {
+    // Validate complexity range
+    const validComplexity = Math.max(1, Math.min(10, complexity || 5));
+
     console.log(`🎯 Plugin generation requested:`, {
       userId,
       name: name || 'auto-generated',
       autoCompile,
-      promptLength: prompt?.length || 0
+      complexity: validComplexity,
+      promptLength: prompt?.length || 0,
     });
-    
+
     const startTime = Date.now();
-    const result = await this.appService.generateAndCompilePlugin(prompt, userId, name, autoCompile);
+    const result = await this.appService.generateAndCompilePlugin(
+      prompt,
+      userId,
+      name,
+      autoCompile,
+      validComplexity,
+    );
     const duration = Date.now() - startTime;
-    
-    console.log(`✅ Plugin generation completed in ${duration}ms for user: ${userId}`);
+
+    console.log(
+      `✅ Plugin generation completed in ${duration}ms for user: ${userId} (complexity: ${validComplexity})`,
+    );
     return result;
-  }  @Post('ai/generate-code')
+  }
+  @Post('ai/generate-code')
   async generateCode(
     @Body('prompt') prompt: string,
-    @Body('pluginName') pluginName: string = 'CustomPlugin'
+    @Body('pluginName') pluginName: string = 'CustomPlugin',
   ): Promise<{ enhancedPrompt: string; pluginProject: PluginProject }> {
     console.log(`🧩 Code-only generation requested:`, {
       pluginName,
-      promptLength: prompt?.length || 0
+      promptLength: prompt?.length || 0,
     });
-    
+
     const startTime = Date.now();
     const result = await this.appService.generateCodeOnly(prompt, pluginName);
     const duration = Date.now() - startTime;
-    
-    console.log(`✅ Code-only generation completed in ${duration}ms for plugin: ${pluginName}`);
+
+    console.log(
+      `✅ Code-only generation completed in ${duration}ms for plugin: ${pluginName}`,
+    );
     return result;
   }
-  @Post('plugin/compile')
+  @Post('plugin/compile-simple')
   async compilePlugin(
     @Body('userId') userId: string,
-    @Body('pluginName') pluginName: string
+    @Body('pluginName') pluginName: string,
   ): Promise<CompilationResult> {
-    console.log(`🔨 Compilation requested:`, { userId, pluginName });
-    
+    console.log(`🔨 Simple compilation requested:`, { userId, pluginName });
+
     const startTime = Date.now();
-    const result = await this.mavenService.compilePluginByUserAndName(userId, pluginName);
-    const duration = Date.now() - startTime;
-    
-    console.log(`${result.success ? '✅' : '❌'} Compilation ${result.success ? 'completed' : 'failed'} in ${duration}ms:`, {
+    const result = await this.mavenService.compilePluginByUserAndName(
       userId,
       pluginName,
-      success: result.success,
-      jarPath: result.jarPath
-    });
-    
+    );
+    const duration = Date.now() - startTime;
+
+    console.log(
+      `${result.success ? '✅' : '❌'} Compilation ${result.success ? 'completed' : 'failed'} in ${duration}ms:`,
+      {
+        userId,
+        pluginName,
+        success: result.success,
+        jarPath: result.jarPath,
+      },
+    );
+
     return result;
   }
 
   @Post('plugin/compile-path')
   async compilePluginByPath(
-    @Body('projectPath') projectPath: string
+    @Body('projectPath') projectPath: string,
   ): Promise<CompilationResult> {
     console.log(`🔨 Path-based compilation requested for: ${projectPath}`);
-    
+
     const startTime = Date.now();
     const result = await this.mavenService.compilePlugin(projectPath);
     const duration = Date.now() - startTime;
-    
-    console.log(`${result.success ? '✅' : '❌'} Path compilation ${result.success ? 'completed' : 'failed'} in ${duration}ms`);
+
+    console.log(
+      `${result.success ? '✅' : '❌'} Path compilation ${result.success ? 'completed' : 'failed'} in ${duration}ms`,
+    );
     return result;
   }
 
   @Post('plugin/status')
   async getCompilationStatus(
     @Body('userId') userId: string,
-    @Body('pluginName') pluginName: string
+    @Body('pluginName') pluginName: string,
   ): Promise<{
     hasTarget: boolean;
     hasJar: boolean;
@@ -150,130 +185,182 @@ export class AppController {  constructor(
     lastModified?: Date;
   }> {
     console.log(`📊 Status check requested:`, { userId, pluginName });
-    
+
     const projectPath = `${process.cwd()}/generated/${userId}/${pluginName}`;
     const result = await this.mavenService.getCompilationStatus(projectPath);
-    
+
     console.log(`📊 Status result:`, {
       userId,
       pluginName,
       hasTarget: result.hasTarget,
       hasJar: result.hasJar,
-      jarCount: result.jarFiles?.length || 0
+      jarCount: result.jarFiles?.length || 0,
     });
-    
+
     return result;
   }
   @Post('plugin/clean')
   async cleanProject(
     @Body('userId') userId: string,
-    @Body('pluginName') pluginName: string
+    @Body('pluginName') pluginName: string,
   ): Promise<{ success: boolean; message: string }> {
     console.log(`🧹 Clean requested:`, { userId, pluginName });
-    
+
     const projectPath = `${process.cwd()}/generated/${userId}/${pluginName}`;
     const success = await this.mavenService.cleanProject(projectPath);
-    
-    console.log(`${success ? '✅' : '❌'} Clean ${success ? 'completed' : 'failed'}:`, {
-      userId,
-      pluginName,
-      success
-    });
-    
+
+    console.log(
+      `${success ? '✅' : '❌'} Clean ${success ? 'completed' : 'failed'}:`,
+      {
+        userId,
+        pluginName,
+        success,
+      },
+    );
+
     return {
       success,
-      message: success ? 'Project cleaned successfully' : 'Failed to clean project'
+      message: success
+        ? 'Project cleaned successfully'
+        : 'Failed to clean project',
     };
   }
   @Post('plugin/fix-errors')
   async fixPluginErrors(
     @Body('userId') userId: string,
     @Body('pluginName') pluginName: string,
-    @Body('maxIterations') maxIterations: number = 3
-  ): Promise<{ success: boolean; message: string; fixAttempted: boolean; iterations?: number; operationsApplied?: number }> {
-    console.log(`🔧 Error fix requested:`, { userId, pluginName, maxIterations });
-    
-    const startTime = Date.now();
-    const result = await this.appService.attemptErrorFix(userId, pluginName, maxIterations);
-    const duration = Date.now() - startTime;
-    
-    console.log(`${result.success ? '✅' : '❌'} Error fix ${result.success ? 'completed' : 'failed'} in ${duration}ms:`, {
+    @Body('maxIterations') maxIterations: number = 5,
+  ): Promise<{
+    success: boolean;
+    message: string;
+    fixAttempted: boolean;
+    iterations?: number;
+    operationsApplied?: number;
+  }> {
+    console.log(`🔧 Error fix requested:`, {
       userId,
       pluginName,
-      success: result.success,
-      fixAttempted: result.fixAttempted,
-      iterations: result.iterations
+      maxIterations,
     });
-    
+
+    const startTime = Date.now();
+    const result = await this.appService.attemptErrorFix(
+      userId,
+      pluginName,
+      maxIterations,
+    );
+    const duration = Date.now() - startTime;
+
+    console.log(
+      `${result.success ? '✅' : '❌'} Error fix ${result.success ? 'completed' : 'failed'} in ${duration}ms:`,
+      {
+        userId,
+        pluginName,
+        success: result.success,
+        fixAttempted: result.fixAttempted,
+        iterations: result.iterations,
+      },
+    );
+
     return {
       success: result.success,
       message: result.message,
       fixAttempted: result.fixAttempted,
       iterations: result.iterations,
-      operationsApplied: result.operationsApplied
+      operationsApplied: result.operationsApplied,
     };
   }
-
   @Post('plugin/generate-and-compile')
   async generateAndCompilePlugin(
     @Body('prompt') prompt: string,
     @Body('userId') userId: string,
     @Body('name') name?: string,
-    @Body('compile') compile: boolean = true
+    @Body('compile') compile: boolean = true,
+    @Body('complexity') complexity: number = 5,
   ): Promise<string> {
+    // Validate complexity range
+    const validComplexity = Math.max(1, Math.min(10, complexity || 5));
+
     console.log(`🚀 Generate-and-compile requested:`, {
       userId,
       name: name || 'auto-generated',
       compile,
-      promptLength: prompt?.length || 0
+      complexity: validComplexity,
+      promptLength: prompt?.length || 0,
     });
-    
+
     const startTime = Date.now();
-    const result = await this.appService.generateAndCompilePlugin(prompt, userId, name, compile);
+    const result = await this.appService.generateAndCompilePlugin(
+      prompt,
+      userId,
+      name,
+      compile,
+      validComplexity,
+    );
     const duration = Date.now() - startTime;
-    
-    console.log(`✅ Generate-and-compile completed in ${duration}ms for user: ${userId}`);
+
+    console.log(
+      `✅ Generate-and-compile completed in ${duration}ms for user: ${userId} (complexity: ${validComplexity})`,
+    );
     return result;
   }
-  
+
   @Post('plugin/generate-only')
   async generatePluginOnly(
     @Body('prompt') prompt: string,
     @Body('userId') userId: string,
-    @Body('name') name?: string
+    @Body('name') name?: string,
+    @Body('complexity') complexity: number = 5,
   ): Promise<string> {
+    // Validate complexity range
+    const validComplexity = Math.max(1, Math.min(10, complexity || 5));
+
     console.log(`📝 Generate-only requested:`, {
       userId,
       name: name || 'auto-generated',
-      promptLength: prompt?.length || 0
+      complexity: validComplexity,
+      promptLength: prompt?.length || 0,
     });
-    
+
     const startTime = Date.now();
-    const result = await this.appService.generatePluginOnly(prompt, userId, name);
+    const result = await this.appService.generatePluginOnly(
+      prompt,
+      userId,
+      name,
+      validComplexity,
+    );
     const duration = Date.now() - startTime;
-    
-    console.log(`✅ Generate-only completed in ${duration}ms for user: ${userId}`);
+
+    console.log(
+      `✅ Generate-only completed in ${duration}ms for user: ${userId} (complexity: ${validComplexity})`,
+    );
     return result;
-  }  
+  }
 
   @Post('plugin/read')
   async readProjectFromDisk(
     @Body('userId') userId: string,
-    @Body('pluginName') pluginName: string
+    @Body('pluginName') pluginName: string,
   ): Promise<DiskProjectInfo> {
     console.log(`📖 Project read requested:`, { userId, pluginName });
-    
+
     const startTime = Date.now();
-    const result = await this.diskReaderService.readProjectFromDisk(userId, pluginName);
-    const duration = Date.now() - startTime;
-    
-    console.log(`${result.projectExists ? '✅' : '❌'} Project read ${result.projectExists ? 'completed' : 'failed'} in ${duration}ms:`, {
+    const result = await this.diskReaderService.readProjectFromDisk(
       userId,
       pluginName,
-      exists: result.projectExists,
-      fileCount: result.pluginProject?.files?.length || 0
-    });
-    
+    );
+    const duration = Date.now() - startTime;
+
+    console.log(
+      `${result.projectExists ? '✅' : '❌'} Project read ${result.projectExists ? 'completed' : 'failed'} in ${duration}ms:`,
+      {
+        userId,
+        pluginName,
+        exists: result.projectExists,
+        fileCount: result.pluginProject?.files?.length || 0,
+      },
+    );
+
     return result;
   }
 
@@ -281,87 +368,106 @@ export class AppController {  constructor(
   async downloadPlugin(
     @Param('userId') userId: string,
     @Param('pluginName') pluginName: string,
-    @Res() res: Response
+    @Res() res: Response,
   ): Promise<void> {
     console.log(`📥 JAR download requested:`, { userId, pluginName });
-    
+
     try {
-      const projectPath = path.join(process.cwd(), 'generated', userId, pluginName);
+      const projectPath = path.join(
+        process.cwd(),
+        'generated',
+        userId,
+        pluginName,
+      );
       const targetDir = path.join(projectPath, 'target');
-      
-      console.log(`📁 Download Service: Checking target directory: ${targetDir}`);
-      
+
+      console.log(
+        `📁 Download Service: Checking target directory: ${targetDir}`,
+      );
+
       // Check if target directory exists
-      if (!await fs.pathExists(targetDir)) {
+      if (!(await fs.pathExists(targetDir))) {
         console.log(`❌ Download Service: Target directory not found`);
-        throw new NotFoundException('Plugin has not been compiled yet. Please compile the plugin first.');
+        throw new NotFoundException(
+          'Plugin has not been compiled yet. Please compile the plugin first.',
+        );
       }
-      
+
       // Find JAR files
       const files = await fs.readdir(targetDir);
-      const jarFiles = files.filter(file => 
-        file.endsWith('.jar') && 
-        !file.includes('-sources.jar') && 
-        !file.includes('-javadoc.jar') &&
-        !file.includes('-original.jar')
+      const jarFiles = files.filter(
+        (file) =>
+          file.endsWith('.jar') &&
+          !file.includes('-sources.jar') &&
+          !file.includes('-javadoc.jar') &&
+          !file.includes('-original.jar'),
       );
-      
-      console.log(`📦 Download Service: Found ${jarFiles.length} JAR files: ${jarFiles.join(', ')}`);
-      
+
+      console.log(
+        `📦 Download Service: Found ${jarFiles.length} JAR files: ${jarFiles.join(', ')}`,
+      );
+
       if (jarFiles.length === 0) {
         console.log(`❌ Download Service: No JAR files found`);
-        throw new NotFoundException('No compiled JAR file found. Please compile the plugin first.');
+        throw new NotFoundException(
+          'No compiled JAR file found. Please compile the plugin first.',
+        );
       }
-      
+
       // Use the first (main) JAR file
       const jarFile = jarFiles[0];
       const jarPath = path.join(targetDir, jarFile);
-      
+
       console.log(`📦 Download Service: Preparing download for: ${jarFile}`);
-      
+
       // Check if file exists
-      if (!await fs.pathExists(jarPath)) {
-        console.log(`❌ Download Service: JAR file not found at path: ${jarPath}`);
+      if (!(await fs.pathExists(jarPath))) {
+        console.log(
+          `❌ Download Service: JAR file not found at path: ${jarPath}`,
+        );
         throw new NotFoundException('JAR file not found.');
       }
-      
+
       // Get file stats
       const stats = await fs.stat(jarPath);
       const fileSize = stats.size;
-      
+
       console.log(`📊 Download Service: JAR file size: ${fileSize} bytes`);
-      
+
       // Set response headers for file download
       res.setHeader('Content-Type', 'application/java-archive');
       res.setHeader('Content-Disposition', `attachment; filename="${jarFile}"`);
       res.setHeader('Content-Length', fileSize);
       res.setHeader('Cache-Control', 'no-cache');
-      
+
       console.log(`📤 Download Service: Starting file stream for ${jarFile}`);
-      
+
       // Stream the file
       const fileStream = fs.createReadStream(jarPath);
-      
+
       fileStream.on('error', (error) => {
         console.error(`❌ Download Service: Stream error:`, error);
         if (!res.headersSent) {
           res.status(500).json({ error: 'Error reading JAR file' });
         }
       });
-      
+
       fileStream.on('end', () => {
-        console.log(`✅ Download Service: Successfully streamed ${jarFile} (${fileSize} bytes)`);
+        console.log(
+          `✅ Download Service: Successfully streamed ${jarFile} (${fileSize} bytes)`,
+        );
       });
-      
+
       fileStream.pipe(res);
-      
     } catch (error) {
       console.error(`❌ Download Service: Download failed:`, error);
-      
+
       if (error instanceof NotFoundException) {
         res.status(404).json({ error: error.message });
       } else {
-        res.status(500).json({ error: 'Internal server error during download' });
+        res
+          .status(500)
+          .json({ error: 'Internal server error during download' });
       }
     }
   }
@@ -369,7 +475,7 @@ export class AppController {  constructor(
   @Get('plugin/download-info/:userId/:pluginName')
   async getDownloadInfo(
     @Param('userId') userId: string,
-    @Param('pluginName') pluginName: string
+    @Param('pluginName') pluginName: string,
   ): Promise<{
     available: boolean;
     jarFile?: string;
@@ -378,49 +484,54 @@ export class AppController {  constructor(
     downloadUrl?: string;
   }> {
     console.log(`📋 Download info requested:`, { userId, pluginName });
-    
+
     try {
-      const projectPath = path.join(process.cwd(), 'generated', userId, pluginName);
+      const projectPath = path.join(
+        process.cwd(),
+        'generated',
+        userId,
+        pluginName,
+      );
       const targetDir = path.join(projectPath, 'target');
-      
-      if (!await fs.pathExists(targetDir)) {
+
+      if (!(await fs.pathExists(targetDir))) {
         console.log(`❌ Download Info: Target directory not found`);
         return { available: false };
       }
-      
+
       const files = await fs.readdir(targetDir);
-      const jarFiles = files.filter(file => 
-        file.endsWith('.jar') && 
-        !file.includes('-sources.jar') && 
-        !file.includes('-javadoc.jar') &&
-        !file.includes('-original.jar')
+      const jarFiles = files.filter(
+        (file) =>
+          file.endsWith('.jar') &&
+          !file.includes('-sources.jar') &&
+          !file.includes('-javadoc.jar') &&
+          !file.includes('-original.jar'),
       );
-      
+
       if (jarFiles.length === 0) {
         console.log(`❌ Download Info: No JAR files found`);
         return { available: false };
       }
-      
+
       const jarFile = jarFiles[0];
       const jarPath = path.join(targetDir, jarFile);
       const stats = await fs.stat(jarPath);
-      
+
       const result = {
         available: true,
         jarFile,
         fileSize: stats.size,
         lastModified: stats.mtime.toISOString(),
-        downloadUrl: `/plugin/download/${userId}/${pluginName}`
+        downloadUrl: `/plugin/download/${userId}/${pluginName}`,
       };
-      
+
       console.log(`✅ Download Info: JAR available:`, {
         jarFile,
         fileSize: stats.size,
-        lastModified: stats.mtime.toISOString()
+        lastModified: stats.mtime.toISOString(),
       });
-      
+
       return result;
-      
     } catch (error) {
       console.error(`❌ Download Info: Error getting download info:`, error);
       return { available: false };
@@ -430,29 +541,32 @@ export class AppController {  constructor(
   @Post('plugin/check-exists')
   async checkProjectExists(
     @Body('userId') userId: string,
-    @Body('pluginName') pluginName: string
+    @Body('pluginName') pluginName: string,
   ): Promise<{
     exists: boolean;
     hasCompiledJar: boolean;
     projectPath?: string;
     lastModified?: string;
   }> {
-    console.log(`🔍 Project existence check requested:`, { userId, pluginName });
-    
+    console.log(`🔍 Project existence check requested:`, {
+      userId,
+      pluginName,
+    });
+
     const result = await this.appService.checkProjectExists(userId, pluginName);
-    
+
     console.log(`📊 Project existence result:`, {
       userId,
       pluginName,
       exists: result.exists,
-      hasCompiledJar: result.hasCompiledJar
+      hasCompiledJar: result.hasCompiledJar,
     });
-    
+
     return {
       exists: result.exists,
       hasCompiledJar: result.hasCompiledJar,
       projectPath: result.projectPath,
-      lastModified: result.lastModified?.toISOString()
+      lastModified: result.lastModified?.toISOString(),
     };
   }
 
@@ -460,29 +574,36 @@ export class AppController {  constructor(
    * Check if a user has a specific plugin
    */
   @Post('/chat/check-user-plugin')
-  async checkUserHasPlugin(@Body() body: { pluginName: string; username: string }) {
+  async checkUserHasPlugin(
+    @Body() body: { pluginName: string; username: string },
+  ) {
     console.log('💬 Chat endpoint: Check user plugin requested:', body);
-    
+
     try {
-      const hasPlugin = await this.chatService.checkUserHasPlugin(body.pluginName, body.username);
-      
-      console.log(`💬 Chat endpoint: User ${body.username} has plugin ${body.pluginName}: ${hasPlugin}`);
-      
+      const hasPlugin = await this.chatService.checkUserHasPlugin(
+        body.pluginName,
+        body.username,
+      );
+
+      console.log(
+        `💬 Chat endpoint: User ${body.username} has plugin ${body.pluginName}: ${hasPlugin}`,
+      );
+
       return {
         success: true,
         hasPlugin,
         pluginName: body.pluginName,
         username: body.username,
-        message: hasPlugin 
+        message: hasPlugin
           ? `User ${body.username} has plugin ${body.pluginName}`
-          : `User ${body.username} does not have plugin ${body.pluginName}`
+          : `User ${body.username} does not have plugin ${body.pluginName}`,
       };
     } catch (error) {
       console.error('❌ Chat endpoint: Error checking user plugin:', error);
       return {
         success: false,
         hasPlugin: false,
-        error: error.message || 'Failed to check user plugin'
+        error: error.message || 'Failed to check user plugin',
       };
     }
   }
@@ -493,24 +614,26 @@ export class AppController {  constructor(
   @Post('/chat/get-user-plugins')
   async getUserPlugins(@Body() body: { username: string }) {
     console.log('📋 Chat endpoint: Get user plugins requested:', body);
-    
+
     try {
       const plugins = await this.chatService.getUserPlugins(body.username);
-      
-      console.log(`📋 Chat endpoint: User ${body.username} has ${plugins.length} plugins`);
-      
+
+      console.log(
+        `📋 Chat endpoint: User ${body.username} has ${plugins.length} plugins`,
+      );
+
       return {
         success: true,
         username: body.username,
         plugins,
-        count: plugins.length
+        count: plugins.length,
       };
     } catch (error) {
       console.error('❌ Chat endpoint: Error getting user plugins:', error);
       return {
         success: false,
         plugins: [],
-        error: error.message || 'Failed to get user plugins'
+        error: error.message || 'Failed to get user plugins',
       };
     }
   }
@@ -519,27 +642,34 @@ export class AppController {  constructor(
    * Add plugin to user
    */
   @Post('/chat/add-user-plugin')
-  async addPluginToUser(@Body() body: { pluginName: string; username: string }) {
+  async addPluginToUser(
+    @Body() body: { pluginName: string; username: string },
+  ) {
     console.log('➕ Chat endpoint: Add plugin to user requested:', body);
-    
+
     try {
-      const success = await this.chatService.addPluginToUser(body.pluginName, body.username);
-      
-      console.log(`➕ Chat endpoint: Add plugin ${body.pluginName} to user ${body.username}: ${success}`);
-      
+      const success = await this.chatService.addPluginToUser(
+        body.pluginName,
+        body.username,
+      );
+
+      console.log(
+        `➕ Chat endpoint: Add plugin ${body.pluginName} to user ${body.username}: ${success}`,
+      );
+
       return {
         success,
         pluginName: body.pluginName,
         username: body.username,
-        message: success 
+        message: success
           ? `Plugin ${body.pluginName} added to user ${body.username}`
-          : `Failed to add plugin ${body.pluginName} to user ${body.username}`
+          : `Failed to add plugin ${body.pluginName} to user ${body.username}`,
       };
     } catch (error) {
       console.error('❌ Chat endpoint: Error adding plugin to user:', error);
       return {
         success: false,
-        error: error.message || 'Failed to add plugin to user'
+        error: error.message || 'Failed to add plugin to user',
       };
     }
   }
@@ -548,26 +678,37 @@ export class AppController {  constructor(
    * Remove plugin from user
    */
   @Post('/chat/remove-user-plugin')
-  async removePluginFromUser(@Body() body: { pluginName: string; username: string }) {
+  async removePluginFromUser(
+    @Body() body: { pluginName: string; username: string },
+  ) {
     console.log('➖ Chat endpoint: Remove plugin from user requested:', body);
-    
+
     try {
-      const success = await this.chatService.removePluginFromUser(body.pluginName, body.username);
-      
-      console.log(`➖ Chat endpoint: Remove plugin ${body.pluginName} from user ${body.username}: ${success}`);
-      
+      const success = await this.chatService.removePluginFromUser(
+        body.pluginName,
+        body.username,
+      );
+
+      console.log(
+        `➖ Chat endpoint: Remove plugin ${body.pluginName} from user ${body.username}: ${success}`,
+      );
+
       return {
         success,
-        pluginName: body.pluginName,        username: body.username,
-        message: success 
+        pluginName: body.pluginName,
+        username: body.username,
+        message: success
           ? `Plugin ${body.pluginName} removed from user ${body.username}`
-          : `Failed to remove plugin ${body.pluginName} from user ${body.username}`
+          : `Failed to remove plugin ${body.pluginName} from user ${body.username}`,
       };
     } catch (error) {
-      console.error('❌ Chat endpoint: Error removing plugin from user:', error);
+      console.error(
+        '❌ Chat endpoint: Error removing plugin from user:',
+        error,
+      );
       return {
         success: false,
-        error: error.message || 'Failed to remove plugin from user'
+        error: error.message || 'Failed to remove plugin from user',
       };
     }
   }
@@ -578,35 +719,163 @@ export class AppController {  constructor(
   @Post('/chat/message')
   async processChatMessage(@Body() body: any) {
     console.log('💬 Chat endpoint: Process chat message requested:', body);
-    
+
     try {
-      if (!body.message || typeof body.message !== 'string' || body.message.trim().length === 0) {
+      if (
+        !body.message ||
+        typeof body.message !== 'string' ||
+        body.message.trim().length === 0
+      ) {
         return {
           success: false,
-          error: 'Message is required and must be a non-empty string'
+          error: 'Message is required and must be a non-empty string',
         };
       }
 
-      if (!body.username || typeof body.username !== 'string' || body.username.trim().length === 0) {
+      if (
+        !body.username ||
+        typeof body.username !== 'string' ||
+        body.username.trim().length === 0
+      ) {
         return {
           success: false,
-          error: 'Username is required and must be a non-empty string'
+          error: 'Username is required and must be a non-empty string',
         };
       }
 
       const response = await this.chatService.processChat(
         body.message.trim(),
         body.username.trim(),
-        body.pluginName?.trim() || undefined
+        body.pluginName?.trim() || undefined,
       );
-      
-      console.log(`💬 Chat endpoint: Chat processed successfully for user ${body.username}`);
+
+      console.log(
+        `💬 Chat endpoint: Chat processed successfully for user ${body.username}`,
+      );
       return response;
     } catch (error) {
       console.error('❌ Chat endpoint: Error processing chat message:', error);
       return {
         success: false,
-        error: error.message || 'Failed to process chat message'
+        error: error.message || 'Failed to process chat message',
+      };
+    }
+  }
+
+  @Post('/chat/history')
+  async getChatHistory(
+    @Body('userId') userId: string,
+    @Body('pluginName') pluginName?: string,
+    @Body('limit') limit: number = 50,
+    @Body('offset') offset: number = 0,
+    @Body('startDate') startDate?: string,
+    @Body('endDate') endDate?: string,
+  ): Promise<{
+    success: boolean;
+    messages?: any[];
+    total?: number;
+    hasMore?: boolean;
+    message?: string;
+  }> {
+    console.log(`📜 Chat history requested:`, {
+      userId,
+      pluginName,
+      limit,
+      offset,
+    });
+
+    try {
+      const filter: any = { userId, limit, offset };
+      if (pluginName) filter.pluginName = pluginName;
+      if (startDate) filter.startDate = new Date(startDate);
+      if (endDate) filter.endDate = new Date(endDate);
+
+      const result =
+        await this.chatService.chatHistoryService.getChatHistory(filter);
+
+      console.log(
+        `✅ Chat history retrieved: ${result.messages.length} messages`,
+      );
+
+      return {
+        success: true,
+        messages: result.messages,
+        total: result.total,
+        hasMore: result.hasMore,
+      };
+    } catch (error) {
+      console.error(`❌ Chat history error: ${error.message}`);
+      return {
+        success: false,
+        message: `Failed to get chat history: ${error.message}`,
+      };
+    }
+  }
+
+  @Post('/chat/history/stats')
+  async getChatHistoryStats(
+    @Body('userId') userId: string,
+    @Body('pluginName') pluginName?: string,
+  ): Promise<{
+    success: boolean;
+    stats?: any;
+    message?: string;
+  }> {
+    console.log(`📊 Chat history stats requested:`, { userId, pluginName });
+
+    try {
+      const stats = await this.chatService.chatHistoryService.getChatStatistics(
+        userId,
+        pluginName,
+      );
+
+      console.log(
+        `✅ Chat stats retrieved: ${stats.totalMessages} total messages`,
+      );
+
+      return {
+        success: true,
+        stats,
+      };
+    } catch (error) {
+      console.error(`❌ Chat stats error: ${error.message}`);
+      return {
+        success: false,
+        message: `Failed to get chat statistics: ${error.message}`,
+      };
+    }
+  }
+
+  @Post('/chat/history/delete')
+  async deleteChatHistory(
+    @Body('userId') userId: string,
+    @Body('pluginName') pluginName?: string,
+  ): Promise<{
+    success: boolean;
+    deletedCount?: number;
+    message?: string;
+  }> {
+    console.log(`🗑️ Chat history deletion requested:`, { userId, pluginName });
+
+    try {
+      const result =
+        await this.chatService.chatHistoryService.deleteChatHistory(
+          userId,
+          pluginName,
+        );
+
+      console.log(`✅ Chat history deleted: ${result.deletedCount} entries`);
+
+      return {
+        success: true,
+        deletedCount: result.deletedCount,
+        message: `Deleted ${result.deletedCount} chat history entries`,
+      };
+    } catch (error) {
+      console.error(`❌ Chat history deletion error: ${error.message}`);
+      return {
+        success: false,
+        message: `Failed to delete chat history: ${error.message}`,
       };
     }
   }
@@ -617,38 +886,51 @@ export class AppController {  constructor(
   @Post('/plugin/files')
   async getPluginFiles(@Body() body: any) {
     console.log('📁 Plugin files endpoint: Get plugin files requested:', body);
-    
+
     try {
-      if (!body.userId || typeof body.userId !== 'string' || body.userId.trim().length === 0) {
+      if (
+        !body.userId ||
+        typeof body.userId !== 'string' ||
+        body.userId.trim().length === 0
+      ) {
         return {
           success: false,
-          error: 'userId is required and must be a non-empty string'
+          error: 'userId is required and must be a non-empty string',
         };
       }
 
-      if (!body.pluginName || typeof body.pluginName !== 'string' || body.pluginName.trim().length === 0) {
+      if (
+        !body.pluginName ||
+        typeof body.pluginName !== 'string' ||
+        body.pluginName.trim().length === 0
+      ) {
         return {
           success: false,
-          error: 'pluginName is required and must be a non-empty string'
+          error: 'pluginName is required and must be a non-empty string',
         };
       }
 
       const files = await this.chatService.getPluginFilesForEditor(
         body.userId.trim(),
-        body.pluginName.trim()
+        body.pluginName.trim(),
       );
-      
-      console.log(`📁 Plugin files endpoint: Retrieved ${Object.keys(files).length} files for user ${body.userId}, plugin ${body.pluginName}`);
-      
+
+      console.log(
+        `📁 Plugin files endpoint: Retrieved ${Object.keys(files).length} files for user ${body.userId}, plugin ${body.pluginName}`,
+      );
+
       return {
         success: true,
-        files
+        files,
       };
     } catch (error) {
-      console.error('❌ Plugin files endpoint: Error getting plugin files:', error);
+      console.error(
+        '❌ Plugin files endpoint: Error getting plugin files:',
+        error,
+      );
       return {
         success: false,
-        error: error.message || 'Failed to get plugin files'
+        error: error.message || 'Failed to get plugin files',
       };
     }
   }
@@ -659,23 +941,30 @@ export class AppController {  constructor(
   @Post('/plugin/clear-cache')
   async clearPluginFilesCache(@Body() body: any) {
     console.log('🗑️ Cache clear endpoint: Clear cache requested:', body);
-    
+
     try {
       if (body.userId && body.pluginName) {
         // Clear cache for specific plugin
-        this.chatService.clearPluginFilesCache(body.userId.trim(), body.pluginName.trim());
-        console.log(`🗑️ Cache clear endpoint: Cleared cache for plugin ${body.pluginName} by user ${body.userId}`);
+        this.chatService.clearPluginFilesCache(
+          body.userId.trim(),
+          body.pluginName.trim(),
+        );
+        console.log(
+          `🗑️ Cache clear endpoint: Cleared cache for plugin ${body.pluginName} by user ${body.userId}`,
+        );
         return {
           success: true,
-          message: `Cache cleared for plugin "${body.pluginName}" by user "${body.userId}"`
+          message: `Cache cleared for plugin "${body.pluginName}" by user "${body.userId}"`,
         };
       } else if (body.userId) {
         // Clear cache for all plugins by user
         this.chatService.clearPluginFilesCache(body.userId.trim());
-        console.log(`🗑️ Cache clear endpoint: Cleared cache for all plugins by user ${body.userId}`);
+        console.log(
+          `🗑️ Cache clear endpoint: Cleared cache for all plugins by user ${body.userId}`,
+        );
         return {
           success: true,
-          message: `Cache cleared for all plugins by user "${body.userId}"`
+          message: `Cache cleared for all plugins by user "${body.userId}"`,
         };
       } else {
         // Clear entire cache
@@ -683,14 +972,14 @@ export class AppController {  constructor(
         console.log(`🗑️ Cache clear endpoint: Cleared entire cache`);
         return {
           success: true,
-          message: 'Entire plugin files cache cleared'
+          message: 'Entire plugin files cache cleared',
         };
       }
     } catch (error) {
       console.error('❌ Cache clear endpoint: Error clearing cache:', error);
       return {
         success: false,
-        error: error.message || 'Failed to clear cache'
+        error: error.message || 'Failed to clear cache',
       };
     }
   }
@@ -701,28 +990,33 @@ export class AppController {  constructor(
   @Get('/plugin/cache-stats')
   async getCacheStats() {
     console.log('📊 Cache stats endpoint: Get cache stats requested');
-    
+
     try {
       const stats = this.chatService.getCacheStats();
-      
-      console.log(`📊 Cache stats endpoint: Retrieved stats - ${stats.totalEntries} cached entries`);
-      
+
+      console.log(
+        `📊 Cache stats endpoint: Retrieved stats - ${stats.totalEntries} cached entries`,
+      );
+
       return {
         success: true,
         stats: {
           totalEntries: stats.totalEntries,
           cacheKeys: stats.cacheKeys,
-          cacheSize: stats.totalEntries
-        }
+          cacheSize: stats.totalEntries,
+        },
       };
     } catch (error) {
-      console.error('❌ Cache stats endpoint: Error getting cache stats:', error);
+      console.error(
+        '❌ Cache stats endpoint: Error getting cache stats:',
+        error,
+      );
       return {
         success: false,
-        error: error.message || 'Failed to get cache stats'
+        error: error.message || 'Failed to get cache stats',
       };
     }
-  }  /**
+  } /**
    * Format uptime in human readable format
    * @param seconds - Uptime in seconds
    * @returns Human readable uptime string
@@ -732,13 +1026,13 @@ export class AppController {  constructor(
     const hours = Math.floor((seconds % 86400) / 3600);
     const minutes = Math.floor((seconds % 3600) / 60);
     const secs = Math.floor(seconds % 60);
-    
+
     const parts: string[] = [];
     if (days > 0) parts.push(`${days}d`);
     if (hours > 0) parts.push(`${hours}h`);
     if (minutes > 0) parts.push(`${minutes}m`);
     parts.push(`${secs}s`);
-    
+
     return parts.join(' ');
   }
 
@@ -747,37 +1041,50 @@ export class AppController {  constructor(
    */
   @Post('/plugin/db/get')
   async getPluginFromDb(@Body() body: any) {
-    console.log('🗄️ MongoDB endpoint: Get plugin from database requested:', body);
-    
+    console.log(
+      '🗄️ MongoDB endpoint: Get plugin from database requested:',
+      body,
+    );
+
     try {
-      if (!body.userId || typeof body.userId !== 'string' || body.userId.trim().length === 0) {
+      if (
+        !body.userId ||
+        typeof body.userId !== 'string' ||
+        body.userId.trim().length === 0
+      ) {
         return {
           success: false,
-          error: 'userId is required and must be a non-empty string'
+          error: 'userId is required and must be a non-empty string',
         };
       }
 
-      if (!body.pluginName || typeof body.pluginName !== 'string' || body.pluginName.trim().length === 0) {
+      if (
+        !body.pluginName ||
+        typeof body.pluginName !== 'string' ||
+        body.pluginName.trim().length === 0
+      ) {
         return {
           success: false,
-          error: 'pluginName is required and must be a non-empty string'
+          error: 'pluginName is required and must be a non-empty string',
         };
       }
 
       const plugin = await this.pluginDbService.getPlugin(
         body.userId.trim(),
-        body.pluginName.trim()
+        body.pluginName.trim(),
       );
-      
+
       if (!plugin) {
         return {
           success: false,
-          error: `Plugin "${body.pluginName}" not found in database for user "${body.userId}"`
+          error: `Plugin "${body.pluginName}" not found in database for user "${body.userId}"`,
         };
       }
-      
-      console.log(`🗄️ MongoDB endpoint: Retrieved plugin from database with ${plugin.files.length} files`);
-      
+
+      console.log(
+        `🗄️ MongoDB endpoint: Retrieved plugin from database with ${plugin.files.length} files`,
+      );
+
       return {
         success: true,
         plugin: {
@@ -792,15 +1099,18 @@ export class AppController {  constructor(
           totalSize: plugin.totalSize,
           createdAt: plugin.createdAt,
           updatedAt: plugin.updatedAt,
-          lastSyncedAt: plugin.lastSyncedAt
+          lastSyncedAt: plugin.lastSyncedAt,
         },
-        files: plugin.files
+        files: plugin.files,
       };
     } catch (error) {
-      console.error('❌ MongoDB endpoint: Error getting plugin from database:', error);
+      console.error(
+        '❌ MongoDB endpoint: Error getting plugin from database:',
+        error,
+      );
       return {
         success: false,
-        error: error.message || 'Failed to get plugin from database'
+        error: error.message || 'Failed to get plugin from database',
       };
     }
   }
@@ -810,22 +1120,33 @@ export class AppController {  constructor(
    */
   @Post('/plugin/db/list')
   async getUserPluginsFromDb(@Body() body: any) {
-    console.log('🗄️ MongoDB endpoint: Get user plugins from database requested:', body);
-    
+    console.log(
+      '🗄️ MongoDB endpoint: Get user plugins from database requested:',
+      body,
+    );
+
     try {
-      if (!body.userId || typeof body.userId !== 'string' || body.userId.trim().length === 0) {
+      if (
+        !body.userId ||
+        typeof body.userId !== 'string' ||
+        body.userId.trim().length === 0
+      ) {
         return {
           success: false,
-          error: 'userId is required and must be a non-empty string'
+          error: 'userId is required and must be a non-empty string',
         };
       }
 
-      const plugins = await this.pluginDbService.getUserPlugins(body.userId.trim());
-      
-      console.log(`🗄️ MongoDB endpoint: Retrieved ${plugins.length} plugins from database for user ${body.userId}`);
-      
+      const plugins = await this.pluginDbService.getUserPlugins(
+        body.userId.trim(),
+      );
+
+      console.log(
+        `🗄️ MongoDB endpoint: Retrieved ${plugins.length} plugins from database for user ${body.userId}`,
+      );
+
       // Return summary without full file contents for list view
-      const pluginSummaries = plugins.map(plugin => ({
+      const pluginSummaries = plugins.map((plugin) => ({
         _id: plugin._id,
         userId: plugin.userId,
         pluginName: plugin.pluginName,
@@ -837,19 +1158,22 @@ export class AppController {  constructor(
         totalSize: plugin.totalSize,
         createdAt: plugin.createdAt,
         updatedAt: plugin.updatedAt,
-        lastSyncedAt: plugin.lastSyncedAt
+        lastSyncedAt: plugin.lastSyncedAt,
       }));
-      
+
       return {
         success: true,
         plugins: pluginSummaries,
-        count: plugins.length
+        count: plugins.length,
       };
     } catch (error) {
-      console.error('❌ MongoDB endpoint: Error getting user plugins from database:', error);
+      console.error(
+        '❌ MongoDB endpoint: Error getting user plugins from database:',
+        error,
+      );
       return {
         success: false,
-        error: error.message || 'Failed to get user plugins from database'
+        error: error.message || 'Failed to get user plugins from database',
       };
     }
   }
@@ -859,33 +1183,49 @@ export class AppController {  constructor(
    */
   @Post('/plugin/db/sync')
   async syncPluginWithDb(@Body() body: any) {
-    console.log('🔄 MongoDB endpoint: Sync plugin with database requested:', body);
-    
+    console.log(
+      '🔄 MongoDB endpoint: Sync plugin with database requested:',
+      body,
+    );
+
     try {
-      if (!body.userId || typeof body.userId !== 'string' || body.userId.trim().length === 0) {
+      if (
+        !body.userId ||
+        typeof body.userId !== 'string' ||
+        body.userId.trim().length === 0
+      ) {
         return {
           success: false,
-          error: 'userId is required and must be a non-empty string'
+          error: 'userId is required and must be a non-empty string',
         };
       }
 
-      if (!body.pluginName || typeof body.pluginName !== 'string' || body.pluginName.trim().length === 0) {
+      if (
+        !body.pluginName ||
+        typeof body.pluginName !== 'string' ||
+        body.pluginName.trim().length === 0
+      ) {
         return {
           success: false,
-          error: 'pluginName is required and must be a non-empty string'
+          error: 'pluginName is required and must be a non-empty string',
         };
       }
 
       const userId = body.userId.trim();
       const pluginName = body.pluginName.trim();
-      
+
       // Check if plugin exists on disk
-      const pluginPath = path.join(process.cwd(), 'generated', userId, pluginName);
-      
-      if (!await fs.pathExists(pluginPath)) {
+      const pluginPath = path.join(
+        process.cwd(),
+        'generated',
+        userId,
+        pluginName,
+      );
+
+      if (!(await fs.pathExists(pluginPath))) {
         return {
           success: false,
-          error: `Plugin "${pluginName}" not found on disk for user "${userId}"`
+          error: `Plugin "${pluginName}" not found on disk for user "${userId}"`,
         };
       }
 
@@ -894,22 +1234,25 @@ export class AppController {  constructor(
         _id: body._id || this.generatePluginId(userId, pluginName),
         userId,
         pluginName,
-        description: body.description || `A Minecraft plugin named ${pluginName}`,
+        description:
+          body.description || `A Minecraft plugin named ${pluginName}`,
         minecraftVersion: body.minecraftVersion || '1.20',
         dependencies: body.dependencies || [],
         metadata: body.metadata || {
           author: 'Pegasus AI',
           version: '1.0.0',
           mainClass: `com.pegasus.${pluginName.toLowerCase()}.Main`,
-          apiVersion: '1.20'
+          apiVersion: '1.20',
         },
-        diskPath: pluginPath
+        diskPath: pluginPath,
       };
 
       const plugin = await this.pluginDbService.syncWithDisk(pluginDto);
-      
-      console.log(`🔄 MongoDB endpoint: Plugin synced with database successfully`);
-      
+
+      console.log(
+        `🔄 MongoDB endpoint: Plugin synced with database successfully`,
+      );
+
       return {
         success: true,
         message: `Plugin "${pluginName}" synced with database`,
@@ -919,14 +1262,17 @@ export class AppController {  constructor(
           pluginName: plugin.pluginName,
           totalFiles: plugin.totalFiles,
           totalSize: plugin.totalSize,
-          lastSyncedAt: plugin.lastSyncedAt
-        }
+          lastSyncedAt: plugin.lastSyncedAt,
+        },
       };
     } catch (error) {
-      console.error('❌ MongoDB endpoint: Error syncing plugin with database:', error);
+      console.error(
+        '❌ MongoDB endpoint: Error syncing plugin with database:',
+        error,
+      );
       return {
         success: false,
-        error: error.message || 'Failed to sync plugin with database'
+        error: error.message || 'Failed to sync plugin with database',
       };
     }
   }
@@ -937,21 +1283,26 @@ export class AppController {  constructor(
   @Get('/plugin/db/stats')
   async getDbStats() {
     console.log('📊 MongoDB endpoint: Get database stats requested');
-    
+
     try {
       const stats = await this.pluginDbService.getDbStats();
-      
-      console.log(`📊 MongoDB endpoint: Retrieved database stats - ${stats.activePlugins} active plugins`);
-      
+
+      console.log(
+        `📊 MongoDB endpoint: Retrieved database stats - ${stats.activePlugins} active plugins`,
+      );
+
       return {
         success: true,
-        stats
+        stats,
       };
     } catch (error) {
-      console.error('❌ MongoDB endpoint: Error getting database stats:', error);
+      console.error(
+        '❌ MongoDB endpoint: Error getting database stats:',
+        error,
+      );
       return {
         success: false,
-        error: error.message || 'Failed to get database stats'
+        error: error.message || 'Failed to get database stats',
       };
     }
   }
@@ -961,16 +1312,19 @@ export class AppController {  constructor(
    */
   @Post('/plugin/db/sync-all')
   async syncAllPluginsWithDb(@Body() body: any) {
-    console.log('🔄 MongoDB endpoint: Sync all plugins with database requested:', body);
-    
+    console.log(
+      '🔄 MongoDB endpoint: Sync all plugins with database requested:',
+      body,
+    );
+
     try {
       const userId = body.userId?.trim();
       const generatedPath = path.join(process.cwd(), 'generated');
-      
-      if (!await fs.pathExists(generatedPath)) {
+
+      if (!(await fs.pathExists(generatedPath))) {
         return {
           success: false,
-          error: 'No generated plugins directory found'
+          error: 'No generated plugins directory found',
         };
       }
 
@@ -983,11 +1337,11 @@ export class AppController {  constructor(
         const userPath = path.join(generatedPath, userId);
         if (await fs.pathExists(userPath)) {
           const pluginDirs = await fs.readdir(userPath);
-          
+
           for (const pluginName of pluginDirs) {
             const pluginPath = path.join(userPath, pluginName);
             const stat = await fs.stat(pluginPath);
-            
+
             if (stat.isDirectory()) {
               try {
                 const pluginDto = {
@@ -1001,9 +1355,9 @@ export class AppController {  constructor(
                     author: 'Pegasus AI',
                     version: '1.0.0',
                     mainClass: `com.pegasus.${pluginName.toLowerCase()}.Main`,
-                    apiVersion: '1.20'
+                    apiVersion: '1.20',
                   },
-                  diskPath: pluginPath
+                  diskPath: pluginPath,
                 };
 
                 await this.pluginDbService.syncWithDisk(pluginDto);
@@ -1012,7 +1366,10 @@ export class AppController {  constructor(
               } catch (error) {
                 errorCount++;
                 errors.push(`${userId}/${pluginName}: ${error.message}`);
-                console.error(`❌ Failed to sync plugin ${userId}/${pluginName}:`, error.message);
+                console.error(
+                  `❌ Failed to sync plugin ${userId}/${pluginName}:`,
+                  error.message,
+                );
               }
             }
           }
@@ -1020,18 +1377,18 @@ export class AppController {  constructor(
       } else {
         // Sync all plugins for all users
         const userDirs = await fs.readdir(generatedPath);
-        
+
         for (const userDir of userDirs) {
           const userPath = path.join(generatedPath, userDir);
           const userStat = await fs.stat(userPath);
-          
+
           if (userStat.isDirectory()) {
             const pluginDirs = await fs.readdir(userPath);
-            
+
             for (const pluginName of pluginDirs) {
               const pluginPath = path.join(userPath, pluginName);
               const stat = await fs.stat(pluginPath);
-              
+
               if (stat.isDirectory()) {
                 try {
                   const pluginDto = {
@@ -1045,9 +1402,9 @@ export class AppController {  constructor(
                       author: 'Pegasus AI',
                       version: '1.0.0',
                       mainClass: `com.pegasus.${pluginName.toLowerCase()}.Main`,
-                      apiVersion: '1.20'
+                      apiVersion: '1.20',
                     },
-                    diskPath: pluginPath
+                    diskPath: pluginPath,
                   };
 
                   await this.pluginDbService.syncWithDisk(pluginDto);
@@ -1056,28 +1413,36 @@ export class AppController {  constructor(
                 } catch (error) {
                   errorCount++;
                   errors.push(`${userDir}/${pluginName}: ${error.message}`);
-                  console.error(`❌ Failed to sync plugin ${userDir}/${pluginName}:`, error.message);
+                  console.error(
+                    `❌ Failed to sync plugin ${userDir}/${pluginName}:`,
+                    error.message,
+                  );
                 }
               }
             }
           }
         }
       }
-      
-      console.log(`🔄 MongoDB endpoint: Bulk sync completed - ${syncedCount} synced, ${errorCount} errors`);
-      
+
+      console.log(
+        `🔄 MongoDB endpoint: Bulk sync completed - ${syncedCount} synced, ${errorCount} errors`,
+      );
+
       return {
         success: true,
         message: `Bulk sync completed: ${syncedCount} plugins synced${errorCount > 0 ? `, ${errorCount} errors` : ''}`,
         syncedCount,
         errorCount,
-        errors: errorCount > 0 ? errors : undefined
+        errors: errorCount > 0 ? errors : undefined,
       };
     } catch (error) {
-      console.error('❌ MongoDB endpoint: Error syncing all plugins with database:', error);
+      console.error(
+        '❌ MongoDB endpoint: Error syncing all plugins with database:',
+        error,
+      );
       return {
         success: false,
-        error: error.message || 'Failed to sync all plugins with database'
+        error: error.message || 'Failed to sync all plugins with database',
       };
     }
   }
@@ -1087,7 +1452,140 @@ export class AppController {  constructor(
    */
   private generatePluginId(userId: string, pluginName: string): string {
     const timestamp = new Date().toISOString().replace(/[:.]/g, '');
-    const hash = Buffer.from(`${userId}:${pluginName}:${timestamp}`).toString('base64url').substring(0, 24);
+    const hash = Buffer.from(`${userId}:${pluginName}:${timestamp}`)
+      .toString('base64url')
+      .substring(0, 24);
     return hash;
+  }
+  @Post('plugin/recompile')
+  async recompilePluginWithAutofix(
+    @Body('userId') userId: string,
+    @Body('pluginName') pluginName: string,
+    @Body('maxFixAttempts') maxFixAttempts: number = 5,
+  ): Promise<{
+    success: boolean;
+    message: string;
+    compilationResult?: CompilationResult;
+    fixAttempted: boolean;
+    fixIterations?: number;
+    fixOperationsApplied?: number;
+    totalAttempts: number;
+  }> {
+    console.log(`🔄 Manual recompile with auto-fix requested:`, {
+      userId,
+      pluginName,
+      maxFixAttempts,
+    });
+
+    const startTime = Date.now();
+    let totalAttempts = 0;
+    let fixAttempted = false;
+    let fixIterations = 0;
+    let fixOperationsApplied = 0;
+
+    try {
+      // Step 1: Try initial compilation
+      console.log(
+        `🔨 Step 1: Initial compilation attempt for plugin "${pluginName}"`,
+      );
+      totalAttempts++;
+      const compilationResult =
+        await this.mavenService.compilePluginByUserAndName(userId, pluginName);
+
+      if (compilationResult.success) {
+        const duration = Date.now() - startTime;
+        console.log(
+          `✅ Manual recompile successful on first try in ${duration}ms`,
+        );
+        return {
+          success: true,
+          message: `Plugin "${pluginName}" recompiled successfully without fixes needed!`,
+          compilationResult,
+          fixAttempted: false,
+          totalAttempts,
+        };
+      }
+
+      // Step 2: If compilation failed, attempt auto-fixes
+      console.log(
+        `❌ Initial compilation failed, starting auto-fix process (max ${maxFixAttempts} attempts)`,
+      );
+      fixAttempted = true;
+
+      const fixResult = await this.appService.attemptErrorFix(
+        userId,
+        pluginName,
+        maxFixAttempts,
+      );
+      fixIterations = fixResult.iterations || 0;
+      fixOperationsApplied = fixResult.operationsApplied || 0;
+      totalAttempts += fixIterations;
+
+      const duration = Date.now() - startTime;
+
+      if (fixResult.success) {
+        console.log(
+          `✅ Manual recompile with auto-fix completed successfully in ${duration}ms after ${fixIterations} fix attempts`,
+        );
+        return {
+          success: true,
+          message: `Plugin "${pluginName}" recompiled successfully after ${fixIterations} auto-fix attempts!`,
+          compilationResult: fixResult.finalCompilationResult,
+          fixAttempted: true,
+          fixIterations,
+          fixOperationsApplied,
+          totalAttempts,
+        };
+      } else {
+        console.log(
+          `❌ Manual recompile with auto-fix failed in ${duration}ms after ${fixIterations} attempts`,
+        );
+        return {
+          success: false,
+          message: `Plugin "${pluginName}" compilation failed even after ${fixIterations} auto-fix attempts. ${fixResult.message}`,
+          fixAttempted: true,
+          fixIterations,
+          fixOperationsApplied,
+          totalAttempts,
+        };
+      }
+    } catch (error) {
+      const duration = Date.now() - startTime;
+      console.error(
+        `❌ Manual recompile with auto-fix error after ${duration}ms:`,
+        error.message,
+      );
+      return {
+        success: false,
+        message: `Error during manual recompile: ${error.message}`,
+        fixAttempted,
+        fixIterations,
+        fixOperationsApplied,
+        totalAttempts,
+      };
+    }
+  }
+  @Post('plugin/compile')
+  async compilePluginWithAutofix(
+    @Body('userId') userId: string,
+    @Body('pluginName') pluginName: string,
+    @Body('maxFixAttempts') maxFixAttempts: number = 5,
+  ): Promise<{
+    success: boolean;
+    message: string;
+    compilationResult?: CompilationResult;
+    fixAttempted: boolean;
+    fixIterations?: number;
+    fixOperationsApplied?: number;
+    totalAttempts: number;
+  }> {
+    console.log(`🔨 Compilation with auto-fix requested:`, {
+      userId,
+      pluginName,
+      maxFixAttempts,
+    });
+
+    // Call the recompile method to maintain DRY principle
+    return this.recompilePluginWithAutofix(userId, pluginName, maxFixAttempts);
   }
 }

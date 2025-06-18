@@ -96,10 +96,13 @@ REMEMBER: If you make ANY formatting or content error, the entire response will 
   /**
    * Generate enhanced user prompt for plugin generation with specific requirements breakdown
    */
-  getPluginGenerationUserPrompt(pluginName: string, requirements: string): string {
+  getPluginGenerationUserPrompt(
+    pluginName: string,
+    requirements: string,
+  ): string {
     const sanitizedPluginName = pluginName.trim();
     const enhancedRequirements = this.enhanceRequirementsContext(requirements);
-    
+
     return `Generate a complete Minecraft plugin with these EXACT specifications:
 
 PLUGIN IDENTITY:
@@ -131,20 +134,27 @@ Generate production-ready code that compiles and runs without modifications.`;
    * Enhance requirements with additional context and specifications
    */
   private enhanceRequirementsContext(requirements: string): string {
-    const lines = requirements.split('\n').map(line => line.trim()).filter(line => line.length > 0);
-    
+    const lines = requirements
+      .split('\n')
+      .map((line) => line.trim())
+      .filter((line) => line.length > 0);
+
     let enhanced = '';
     lines.forEach((line, index) => {
       enhanced += `${index + 1}. ${line}\n`;
     });
-    
+
     // Add technical implementation hints
     enhanced += '\nTECHNICAL CONSIDERATIONS:\n';
     if (requirements.toLowerCase().includes('command')) {
-      enhanced += '- Implement command handling with proper permission checks\n';
+      enhanced +=
+        '- Implement command handling with proper permission checks\n';
       enhanced += '- Include tab completion for user-friendly experience\n';
     }
-    if (requirements.toLowerCase().includes('event') || requirements.toLowerCase().includes('listener')) {
+    if (
+      requirements.toLowerCase().includes('event') ||
+      requirements.toLowerCase().includes('listener')
+    ) {
       enhanced += '- Implement event listeners with proper event handling\n';
       enhanced += '- Cancel events appropriately when needed\n';
     }
@@ -152,163 +162,229 @@ Generate production-ready code that compiles and runs without modifications.`;
       enhanced += '- Include configuration file support\n';
       enhanced += '- Provide default values and validation\n';
     }
-    if (requirements.toLowerCase().includes('database') || requirements.toLowerCase().includes('storage')) {
+    if (
+      requirements.toLowerCase().includes('database') ||
+      requirements.toLowerCase().includes('storage')
+    ) {
       enhanced += '- Implement data persistence with proper error handling\n';
       enhanced += '- Include data validation and backup mechanisms\n';
     }
-    if (requirements.toLowerCase().includes('gui') || requirements.toLowerCase().includes('inventory')) {
+    if (
+      requirements.toLowerCase().includes('gui') ||
+      requirements.toLowerCase().includes('inventory')
+    ) {
       enhanced += '- Create interactive inventory GUIs\n';
       enhanced += '- Handle click events and inventory management\n';
     }
-    
+
     return enhanced;
   }
 
   /**
    * Generate system prompt for prompt enhancement
-   */  getPromptEnhancementSystemPrompt(): string {
+   */ getPromptEnhancementSystemPrompt(): string {
     return `You are an expert Minecraft plugin development consultant with deep knowledge of Bukkit/Spigot APIs, Java development patterns, and plugin architecture best practices.
 
-YOUR TASK: Transform vague user requirements into detailed, technical specifications that will produce high-quality, production-ready Minecraft plugins.
+YOUR CRITICAL TASK: Transform user requirements into precise technical specifications that implement ONLY what the user explicitly wants, without adding extra features.
 
-ENHANCEMENT STRATEGY:
-1. CLARIFY AMBIGUOUS REQUIREMENTS
-   - Convert general requests into specific technical features
-   - Define exact user interactions and workflows
-   - Specify data structures and storage needs
+CORE PRINCIPLES:
+1. STAY TRUE TO USER INTENT
+   - Focus ONLY on explicitly requested features
+   - Do NOT add features the user didn't ask for
+   - Resist feature creep and scope expansion
+   - If unclear, interpret conservatively
 
-2. ADD TECHNICAL IMPLEMENTATION DETAILS
-   - Identify required Bukkit/Spigot APIs and events
-   - Specify command structures and permissions
-   - Define configuration requirements
-   - Outline error handling strategies
+2. CLARIFY CORE REQUIREMENTS ONLY
+   - Convert vague requests into specific implementations of requested features
+   - Define exact user interactions for ONLY the mentioned functionality
+   - Specify data structures needed for the requested features only
 
-3. INCLUDE BEST PRACTICES
-   - Performance considerations
-   - Security measures (permission checks, input validation)
-   - User experience improvements
-   - Code organization patterns
+3. TECHNICAL IMPLEMENTATION FOR REQUESTED FEATURES
+   - Identify required Bukkit/Spigot APIs for the specific features requested
+   - Specify command structures ONLY for commands the user mentioned
+   - Define configuration for the requested functionality only
+   - Include error handling for the core features only
 
-4. SPECIFY INTEGRATION REQUIREMENTS
-   - Dependencies on other plugins or libraries
-   - Database or file storage requirements
-   - Network communication needs
-   - Multi-world compatibility
+4. ESSENTIAL BEST PRACTICES ONLY
+   - Security measures for the requested features (permission checks, input validation)
+   - Performance considerations specific to the requested functionality
+   - User experience for the core features only
+
+FORBIDDEN ENHANCEMENTS:
+- Do NOT suggest additional commands beyond what was requested
+- Do NOT add GUI interfaces unless explicitly mentioned
+- Do NOT add database features unless user specifically requested data persistence
+- Do NOT add economy integration unless explicitly requested
+- Do NOT suggest "future expansion" or "additional features"
+- Do NOT add administrative commands unless requested
 
 ENHANCED SPECIFICATION FORMAT:
-Provide a structured enhancement that includes:
+Provide a focused enhancement that includes ONLY:
 
-CORE FUNCTIONALITY:
-- [List main features with technical details]
+CORE FUNCTIONALITY (User-Requested Only):
+- [List ONLY the main features the user explicitly mentioned]
 
-USER INTERACTIONS:
-- [Commands with syntax and permissions]
-- [GUI interfaces if applicable]
-- [Event triggers and responses]
+USER INTERACTIONS (As Requested):
+- [Commands with syntax - ONLY those the user mentioned]
+- [Event triggers ONLY if user specified them]
 
-TECHNICAL REQUIREMENTS:
-- [Required APIs and events]
-- [Data persistence strategy]
-- [Configuration options]
-- [Performance considerations]
+TECHNICAL REQUIREMENTS (Minimal):
+- [Required APIs for the specific requested features only]
+- [Data persistence ONLY if user mentioned saving/loading data]
+- [Configuration options for the requested features only]
 
-QUALITY STANDARDS:
-- [Error handling requirements]
-- [Security measures]
-- [User feedback mechanisms]
-- [Logging and debugging features]
+QUALITY STANDARDS (Essential Only):
+- [Error handling for the core requested functionality]
+- [Basic security for the requested features]
+- [User feedback for the requested operations only]
 
-MINECRAFT-SPECIFIC CONSIDERATIONS:
-- [Version compatibility]
-- [Multi-world support if needed]
-- [Resource pack/texture requirements]
-- [Server performance impact]
-
-Keep enhancement focused, detailed, and technically oriented while maintaining the original intent. Provide enough detail for a developer to implement without ambiguity.`;
-  }
-  /**
-   * Generate enhanced user prompt for prompt enhancement with context analysis
+Keep enhancement laser-focused on the user's explicit requirements. Implement their vision precisely without expanding scope. Quality over quantity - make the requested features work perfectly rather than adding extras.`;
+  } /**
+   * Generate enhanced user prompt for prompt enhancement with context analysis and complexity consideration
    */
-  getPromptEnhancementUserPrompt(originalPrompt: string): string {
+  getPromptEnhancementUserPrompt(
+    originalPrompt: string,
+    complexity: number = 5,
+  ): string {
     const promptLength = originalPrompt.length;
     const hasCommands = originalPrompt.toLowerCase().includes('command');
-    const hasEvents = originalPrompt.toLowerCase().includes('event') || originalPrompt.toLowerCase().includes('listener');
-    const hasGUI = originalPrompt.toLowerCase().includes('gui') || originalPrompt.toLowerCase().includes('inventory');
-    const hasStorage = originalPrompt.toLowerCase().includes('storage') || originalPrompt.toLowerCase().includes('save') || originalPrompt.toLowerCase().includes('database');
-    
+    const hasEvents =
+      originalPrompt.toLowerCase().includes('event') ||
+      originalPrompt.toLowerCase().includes('listener');
+    const hasGUI =
+      originalPrompt.toLowerCase().includes('gui') ||
+      originalPrompt.toLowerCase().includes('inventory');
+    const hasStorage =
+      originalPrompt.toLowerCase().includes('storage') ||
+      originalPrompt.toLowerCase().includes('save') ||
+      originalPrompt.toLowerCase().includes('database');
+
+    // Complexity-based enhancement instructions
+    let complexityInstructions = '';
+    if (complexity <= 3) {
+      complexityInstructions = `
+TARGET COMPLEXITY: SIMPLE (${complexity}/10)
+Focus on basic functionality with minimal features:
+- Simple commands and basic functionality
+- Minimal configuration requirements
+- Basic error handling
+- Straightforward user interactions
+- Single-file solutions where possible`;
+    } else if (complexity <= 6) {
+      complexityInstructions = `
+TARGET COMPLEXITY: MODERATE (${complexity}/10)
+Include moderate features and systems:
+- Multiple commands and features
+- Configuration files and options
+- Event handling and listeners
+- User data persistence
+- Permission system integration`;
+    } else {
+      complexityInstructions = `
+TARGET COMPLEXITY: ADVANCED (${complexity}/10)
+Design comprehensive systems with advanced features:
+- Complex multi-system architecture
+- Database integration and data management
+- Advanced GUI systems and user interfaces
+- Plugin integration and API usage
+- Performance optimization and caching
+- Advanced permission and role systems
+- Multi-world and cross-server support`;
+    }
+
     let contextHints = '';
     if (promptLength < 50) {
-      contextHints += 'NOTE: This is a brief requirement that needs significant expansion. ';
+      contextHints +=
+        'NOTE: This is a brief requirement that needs significant expansion. ';
     }
     if (hasCommands) {
-      contextHints += 'Include detailed command specifications with permissions and syntax. ';
+      contextHints +=
+        'Include detailed command specifications with permissions and syntax. ';
     }
     if (hasEvents) {
-      contextHints += 'Specify event handling requirements and trigger conditions. ';
+      contextHints +=
+        'Specify event handling requirements and trigger conditions. ';
     }
     if (hasGUI) {
       contextHints += 'Detail GUI design and user interaction flows. ';
     }
     if (hasStorage) {
-      contextHints += 'Define data persistence requirements and storage formats. ';
+      contextHints +=
+        'Define data persistence requirements and storage formats. ';
     }
-    
-    return `Transform this plugin requirement into a comprehensive technical specification:
+    return `Transform this plugin requirement into a focused technical specification that implements ONLY what the user explicitly requested:
 
 ORIGINAL REQUIREMENT:
 "${originalPrompt}"
 
-ENHANCEMENT INSTRUCTIONS:
+${complexityInstructions}
+
+CRITICAL ENHANCEMENT RULES:
 ${contextHints}
+⚠️ IMPORTANT: Focus ONLY on the features explicitly mentioned in the original requirement. Do NOT add extra features, commands, or functionality that the user did not request.
 
-Please provide a detailed specification that includes:
-1. Specific feature breakdown with technical implementation details
-2. Complete command structures with permissions and syntax
-3. Event handling requirements and API usage
-4. Data storage and configuration needs
-5. User interface design (commands, GUIs, messages)
-6. Error handling and validation requirements
-7. Performance and security considerations
-8. Integration and compatibility requirements
+Please provide a specification that includes ONLY:
+1. Core features breakdown - implement ONLY what was requested
+2. Required commands - ONLY those explicitly mentioned by the user
+3. Essential event handling - ONLY if the user's request requires it
+4. Minimal data storage - ONLY if the user mentioned saving/loading data
+5. Basic user interface - ONLY for the requested functionality
+6. Essential error handling - for the core requested features only
+7. Security for requested features - no additional administrative features
+8. Technical requirements - minimal set needed for the requested functionality
 
-Make the specification detailed enough that a developer can implement it without ambiguity or additional questions.`;
+FORBIDDEN ADDITIONS:
+- Do NOT add administrative commands unless requested
+- Do NOT add GUI interfaces unless explicitly mentioned
+- Do NOT add database/economy features unless requested
+- Do NOT suggest additional commands beyond user's request
+- Do NOT add configuration options beyond what's needed for the core request
+
+Make the specification focused and precise - implement the user's vision exactly as requested, without scope creep or feature expansion.`;
   }
+
   /**
    * Get optimized model configurations for maximum accuracy
    */
-  getModelConfigurations(): Record<string, { model: string; temperature?: number; max_tokens?: number; top_p?: number }> {
+  getModelConfigurations(): Record<
+    string,
+    { model: string; temperature?: number; max_tokens?: number; top_p?: number }
+  > {
     return {
       codeGeneration: {
         model: 'anthropic/claude-sonnet-4',
         temperature: 0.1, // Very low for consistency and accuracy
         max_tokens: 16000, // Increased for complex plugins
-        top_p: 0.9 // Focused on most likely tokens
+        top_p: 0.9, // Focused on most likely tokens
       },
       promptEnhancement: {
         model: 'anthropic/claude-sonnet-4', // Upgraded from Gemini for better technical understanding
         temperature: 0.3, // Low for consistent technical analysis
         max_tokens: 6000,
-        top_p: 0.95
+        top_p: 0.95,
       },
       errorFix: {
         model: 'anthropic/claude-sonnet-4',
         temperature: 0.05, // Extremely low for precise error fixing
         max_tokens: 16000,
-        top_p: 0.85 // Very focused for debugging
+        top_p: 0.85, // Very focused for debugging
       },
       validation: {
         model: 'anthropic/claude-sonnet-4',
         temperature: 0.0, // Deterministic for validation
         max_tokens: 4000,
-        top_p: 0.8
-      }
+        top_p: 0.8,
+      },
     };
   }
 
   /**
    * Validate prompt template parameters
    */
-  validatePromptParameters(pluginName: string, requirements: string): { isValid: boolean; errors: string[] } {
+  validatePromptParameters(
+    pluginName: string,
+    requirements: string,
+  ): { isValid: boolean; errors: string[] } {
     const errors: string[] = [];
 
     if (!pluginName || pluginName.trim().length === 0) {
@@ -321,56 +397,64 @@ Make the specification detailed enough that a developer can implement it without
 
     if (pluginName && pluginName.length > 100) {
       errors.push('Plugin name is too long (max 100 characters)');
-    }    if (requirements && requirements.length > 50000) {
+    }
+    if (requirements && requirements.length > 50000) {
       errors.push('Requirements are too long (max 50000 characters)');
     }
 
     // Validate plugin name format
     if (pluginName && !/^[a-zA-Z][a-zA-Z0-9_-]*$/.test(pluginName)) {
-      errors.push('Plugin name must start with a letter and contain only letters, numbers, underscores, and hyphens');
+      errors.push(
+        'Plugin name must start with a letter and contain only letters, numbers, underscores, and hyphens',
+      );
     }
 
     return {
       isValid: errors.length === 0,
-      errors
+      errors,
     };
   }
 
   /**
    * Get fallback project template
    */
-  getFallbackProjectTemplate(pluginName: string, requirements: string): PluginProject {
+  getFallbackProjectTemplate(
+    pluginName: string,
+    requirements: string,
+  ): PluginProject {
     const packageName = pluginName.toLowerCase().replace(/[^a-z0-9]/g, '');
-    
+
     return {
       projectName: pluginName,
-      minecraftVersion: "1.20.1",
+      minecraftVersion: '1.20.1',
       files: [
         {
           path: `src/main/java/com/example/${packageName}/${this.capitalizeFirstLetter(pluginName)}Plugin.java`,
           content: this.createFallbackMainClass(pluginName, packageName),
-          type: "java"
+          type: 'java',
         },
         {
-          path: "src/main/resources/plugin.yml",
-          content: this.createFallbackPluginYml(pluginName, packageName, requirements),
-          type: "yaml"
+          path: 'src/main/resources/plugin.yml',
+          content: this.createFallbackPluginYml(
+            pluginName,
+            packageName,
+            requirements,
+          ),
+          type: 'yaml',
         },
         {
-          path: "pom.xml",
+          path: 'pom.xml',
           content: this.createFallbackPomXml(pluginName, packageName),
-          type: "xml"
+          type: 'xml',
         },
         {
-          path: "README.md",
+          path: 'README.md',
           content: this.createFallbackReadme(pluginName, requirements),
-          type: "md"
-        }
+          type: 'md',
+        },
       ],
-      dependencies: [
-        "org.spigotmc:spigot-api:1.20.1-R0.1-SNAPSHOT"
-      ],
-      buildInstructions: "mvn clean compile package"
+      dependencies: ['org.spigotmc:spigot-api:1.20.1-R0.1-SNAPSHOT'],
+      buildInstructions: 'mvn clean compile package',
     };
   }
 
@@ -378,7 +462,10 @@ Make the specification detailed enough that a developer can implement it without
     return str.charAt(0).toUpperCase() + str.slice(1);
   }
 
-  private createFallbackMainClass(pluginName: string, packageName: string): string {
+  private createFallbackMainClass(
+    pluginName: string,
+    packageName: string,
+  ): string {
     const className = this.capitalizeFirstLetter(pluginName) + 'Plugin';
     return `package com.example.${packageName};
 
@@ -417,7 +504,11 @@ public class ${className} extends JavaPlugin {
 }`;
   }
 
-  private createFallbackPluginYml(pluginName: string, packageName: string, requirements: string): string {
+  private createFallbackPluginYml(
+    pluginName: string,
+    packageName: string,
+    requirements: string,
+  ): string {
     const className = this.capitalizeFirstLetter(pluginName) + 'Plugin';
     return `name: ${pluginName}
 version: 1.0.0
@@ -438,7 +529,10 @@ permissions:
     default: true`;
   }
 
-  private createFallbackPomXml(pluginName: string, packageName: string): string {
+  private createFallbackPomXml(
+    pluginName: string,
+    packageName: string,
+  ): string {
     return `<?xml version="1.0" encoding="UTF-8"?>
 <project xmlns="http://maven.apache.org/POM/4.0.0"
          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
@@ -488,7 +582,10 @@ permissions:
 </project>`;
   }
 
-  private createFallbackReadme(pluginName: string, requirements: string): string {
+  private createFallbackReadme(
+    pluginName: string,
+    requirements: string,
+  ): string {
     return `# ${pluginName}
 
 ## Description

@@ -1,5 +1,0 @@
-{
-  "prompt": "Create a simple economy plugin that gives players 100 coins when they join the server for the first time. Include a command /balance to check coins.",
-  "userId": "demo-user-2",
-  "pluginName": "WelcomeCoins"
-}

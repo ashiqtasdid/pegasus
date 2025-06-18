@@ -42,49 +42,69 @@ export class OpenRouterClient {
 
   constructor(private configService: ConfigService) {
     this.apiKey = this.configService.get<string>('OPENROUTER_API_KEY') || '';
-    this.siteUrl = this.configService.get<string>('YOUR_SITE_URL', 'http://localhost:3000');
-    this.siteName = this.configService.get<string>('YOUR_SITE_NAME', 'Pegasus Plugin Generator');
+    this.siteUrl = this.configService.get<string>(
+      'YOUR_SITE_URL',
+      'http://localhost:3000',
+    );
+    this.siteName = this.configService.get<string>(
+      'YOUR_SITE_NAME',
+      'Pegasus Plugin Generator',
+    );
 
     if (!this.apiKey) {
-      throw new Error('OPENROUTER_API_KEY is not configured in environment variables');
+      throw new Error(
+        'OPENROUTER_API_KEY is not configured in environment variables',
+      );
     }
   }
 
   /**
    * Make a chat completion request to OpenRouter API
    */
-  async chatCompletion(request: OpenRouterRequest): Promise<OpenRouterResponse> {
+  async chatCompletion(
+    request: OpenRouterRequest,
+  ): Promise<OpenRouterResponse> {
     const startTime = Date.now();
     console.log(`🔗 OpenRouter Client: Making HTTP request to OpenRouter API`);
-    console.log(`📊 OpenRouter Client: Request model: ${request.model}, temperature: ${request.temperature}, max_tokens: ${request.max_tokens}`);
-    
+    console.log(
+      `📊 OpenRouter Client: Request model: ${request.model}, temperature: ${request.temperature}, max_tokens: ${request.max_tokens}`,
+    );
+
     try {
       const response: AxiosResponse<OpenRouterResponse> = await axios.post(
         `${this.baseUrl}/chat/completions`,
         request,
         {
           headers: {
-            'Authorization': `Bearer ${this.apiKey}`,
+            Authorization: `Bearer ${this.apiKey}`,
             'Content-Type': 'application/json',
             'HTTP-Referer': this.siteUrl,
             'X-Title': this.siteName,
           },
           timeout: 60000, // 60 second timeout
-        }
+        },
       );
 
       const duration = Date.now() - startTime;
       console.log(`✅ OpenRouter Client: API call completed in ${duration}ms`);
-      console.log(`📊 OpenRouter Client: Token usage - prompt: ${response.data.usage?.prompt_tokens}, completion: ${response.data.usage?.completion_tokens}, total: ${response.data.usage?.total_tokens}`);
+      console.log(
+        `📊 OpenRouter Client: Token usage - prompt: ${response.data.usage?.prompt_tokens}, completion: ${response.data.usage?.completion_tokens}, total: ${response.data.usage?.total_tokens}`,
+      );
 
       return response.data;
     } catch (error) {
       const duration = Date.now() - startTime;
-      console.error(`❌ OpenRouter Client: API call failed after ${duration}ms`);
-      
+      console.error(
+        `❌ OpenRouter Client: API call failed after ${duration}ms`,
+      );
+
       if (axios.isAxiosError(error)) {
-        console.error(`❌ OpenRouter Client: HTTP ${error.response?.status} - ${error.response?.data?.error?.message || error.message}`);
-        throw new Error(`OpenRouter API error: ${error.response?.data?.error?.message || error.message}`);
+        console.error(
+          `❌ OpenRouter Client: HTTP ${error.response?.status} - ${error.response?.data?.error?.message || error.message}`,
+        );
+        throw new Error(
+          `OpenRouter API error: ${error.response?.data?.error?.message || error.message}`,
+        );
       }
       console.error(`❌ OpenRouter Client: Unexpected error: ${error.message}`);
       throw new Error(`Failed to call OpenRouter API: ${error.message}`);
@@ -111,7 +131,7 @@ export class OpenRouterClient {
 
     return {
       isValid: errors.length === 0,
-      errors
+      errors,
     };
   }
 
@@ -124,7 +144,7 @@ export class OpenRouterClient {
       siteUrl: this.siteUrl,
       siteName: this.siteName,
       hasApiKey: !!this.apiKey,
-      apiKeyLength: this.apiKey?.length || 0
+      apiKeyLength: this.apiKey?.length || 0,
     };
   }
 }

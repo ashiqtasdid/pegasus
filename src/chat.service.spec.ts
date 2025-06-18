@@ -16,8 +16,8 @@ describe('ChatService', () => {
     mockOpenRouterClient = {
       chatCompletion: jest.fn().mockResolvedValue({
         choices: [{ message: { content: '{"query": "info"}' } }],
-        usage: { total_tokens: 10 }
-      })
+        usage: { total_tokens: 10 },
+      }),
     };
 
     // Create a mock ErrorFixService
@@ -25,16 +25,19 @@ describe('ChatService', () => {
       fixAndCompile: jest.fn().mockResolvedValue({
         success: true,
         message: 'Plugin compiled successfully',
-        finalCompilationResult: { success: true, message: 'Compilation successful' }
-      })
+        finalCompilationResult: {
+          success: true,
+          message: 'Compilation successful',
+        },
+      }),
     };
 
     // Create a mock MavenService
     mockMavenService = {
       compilePlugin: jest.fn().mockResolvedValue({
         success: true,
-        message: 'Plugin compiled successfully'
-      })
+        message: 'Plugin compiled successfully',
+      }),
     };
 
     const module: TestingModule = await Test.createTestingModule({
@@ -42,15 +45,15 @@ describe('ChatService', () => {
         ChatService,
         {
           provide: OpenRouterClient,
-          useValue: mockOpenRouterClient
+          useValue: mockOpenRouterClient,
         },
         {
           provide: ErrorFixService,
-          useValue: mockErrorFixService
+          useValue: mockErrorFixService,
         },
         {
           provide: MavenService,
-          useValue: mockMavenService
+          useValue: mockMavenService,
         },
         {
           provide: ConfigService,
@@ -58,9 +61,9 @@ describe('ChatService', () => {
             get: jest.fn((key: string) => {
               if (key === 'OPENROUTER_API_KEY') return 'test-key';
               return 'test-value';
-            })
-          }
-        }
+            }),
+          },
+        },
       ],
     }).compile();
 
@@ -88,7 +91,10 @@ describe('ChatService', () => {
     });
 
     it('should handle whitespace in inputs', async () => {
-      const result = await service.checkUserHasPlugin('  testPlugin  ', '  testUser  ');
+      const result = await service.checkUserHasPlugin(
+        '  testPlugin  ',
+        '  testUser  ',
+      );
       expect(result).toBe(true);
     });
   });
@@ -124,7 +130,10 @@ describe('ChatService', () => {
 
   describe('removePluginFromUser', () => {
     it('should return true for valid inputs (placeholder)', async () => {
-      const result = await service.removePluginFromUser('testPlugin', 'testUser');
+      const result = await service.removePluginFromUser(
+        'testPlugin',
+        'testUser',
+      );
       expect(result).toBe(true);
     });
 

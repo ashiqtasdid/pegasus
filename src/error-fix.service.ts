@@ -1,6 +1,11 @@
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { OpenRouterClient, OpenRouterMessage, OpenRouterRequest, OpenRouterResponse } from './openrouter.client';
+import {
+  OpenRouterClient,
+  OpenRouterMessage,
+  OpenRouterRequest,
+  OpenRouterResponse,
+} from './openrouter.client';
 import { PluginProject } from './ai-prompt-templates.service';
 import { DiskReaderService, DiskProjectInfo } from './disk-reader.service';
 import { MavenService, CompilationResult } from './maven.service';
@@ -132,18 +137,29 @@ export class ErrorFixService {
             compilationResult.errors ||
             'No detailed error output',
           currentProject: projectInfo.pluginProject,
-        };        // Generate fix using AI
-        console.log(`🤖 Error Fix Service: Analyzing compilation errors for iteration ${iteration}`);
-        console.log(`📊 Error Fix Service: Current project has ${projectInfo.pluginProject.files.length} files`);
-        
+        }; // Generate fix using AI
+        console.log(
+          `🤖 Error Fix Service: Analyzing compilation errors for iteration ${iteration}`,
+        );
+        console.log(
+          `📊 Error Fix Service: Current project has ${projectInfo.pluginProject.files.length} files`,
+        );
+
         // Check if the project has substantial content - if so, be more conservative
-        const totalContentLength = projectInfo.pluginProject.files.reduce((sum, file) => sum + file.content.length, 0);
-        console.log(`📊 Error Fix Service: Total project content: ${totalContentLength} characters`);
-        
+        const totalContentLength = projectInfo.pluginProject.files.reduce(
+          (sum, file) => sum + file.content.length,
+          0,
+        );
+        console.log(
+          `📊 Error Fix Service: Total project content: ${totalContentLength} characters`,
+        );
+
         if (totalContentLength < 1000) {
-          console.log(`⚠️ Error Fix Service: Project seems minimal (${totalContentLength} chars), might need regeneration rather than fixing`);
+          console.log(
+            `⚠️ Error Fix Service: Project seems minimal (${totalContentLength} chars), might need regeneration rather than fixing`,
+          );
         }
-        
+
         const fixResponse = await this.generateErrorFix(errorContext);
         if (!fixResponse) {
           return {
@@ -196,17 +212,25 @@ export class ErrorFixService {
         fixAttempted: true,
       };
     }
-  }  private async generateErrorFix(
+  }
+  private async generateErrorFix(
     errorContext: CompilationErrorContext,
   ): Promise<ErrorFixResponse | null> {
-    console.log(`🤖 Error Fix Service: Starting error analysis for "${errorContext.pluginName}"`);
-    console.log(`🎯 Error Fix Service: Using Claude Sonnet 4 for error analysis and fixes`);
-    
+    console.log(
+      `🤖 Error Fix Service: Starting error analysis for "${errorContext.pluginName}"`,
+    );
+    console.log(
+      `🎯 Error Fix Service: Using Claude Sonnet 4 for error analysis and fixes`,
+    );
+
     try {
       const fixPrompt = this.buildErrorFixPrompt(errorContext);
-      console.log(`📝 Error Fix Service: Built error fix prompt: ${fixPrompt.length} characters`);
+      console.log(
+        `📝 Error Fix Service: Built error fix prompt: ${fixPrompt.length} characters`,
+      );
 
-      const messages: OpenRouterMessage[] = [        {
+      const messages: OpenRouterMessage[] = [
+        {
           role: 'system',
           content: `You are a Minecraft plugin compilation error fixing expert. You MUST respond with ONLY a valid JSON object. No explanations, no markdown code blocks, no text outside the JSON structure.
 
@@ -274,15 +298,17 @@ Your response will be validated for:
 ✓ Proper string escaping
 ✓ Complete file content
 ✓ Valid operation types
-✓ No markdown or extra text`
+✓ No markdown or extra text`,
         },
         {
           role: 'user',
-          content: fixPrompt
-        }
+          content: fixPrompt,
+        },
       ];
 
-      console.log(`🌐 Error Fix Service: Calling OpenRouter API with Claude Sonnet 4 for error analysis`);
+      console.log(
+        `🌐 Error Fix Service: Calling OpenRouter API with Claude Sonnet 4 for error analysis`,
+      );
       const response = await this.openRouterClient.chatCompletion({
         model: this.errorFixModel,
         messages,
@@ -290,41 +316,66 @@ Your response will be validated for:
         max_tokens: 12000, // Allow large responses for complex fixes
       });
 
-      console.log(`✅ Error Fix Service: Received response from OpenRouter (${response.usage?.total_tokens || 'unknown'} tokens)`);
+      console.log(
+        `✅ Error Fix Service: Received response from OpenRouter (${response.usage?.total_tokens || 'unknown'} tokens)`,
+      );
 
       const aiResponse = response.choices[0]?.message?.content || '';
-      console.log(`� Error Fix Service: Response length: ${aiResponse.length} characters`);
+      console.log(
+        `� Error Fix Service: Response length: ${aiResponse.length} characters`,
+      );
 
       try {
         // Parse the JSON response using the same logic as AI service        console.log(`🔍 Error Fix Service: Parsing JSON response...`);
         const fixResponse = await this.parseAIFixResponse(aiResponse);
-        console.log(`✅ Error Fix Service: Successfully parsed JSON fix response`);
-        console.log(`🔧 Error Fix Service: Generated ${fixResponse.operations?.length || 0} operations for error fixing`);
-        
+        console.log(
+          `✅ Error Fix Service: Successfully parsed JSON fix response`,
+        );
+        console.log(
+          `🔧 Error Fix Service: Generated ${fixResponse.operations?.length || 0} operations for error fixing`,
+        );
+
         // Validate the response structure
         if (!fixResponse.operations || !Array.isArray(fixResponse.operations)) {
           console.log(`❌ Error Fix Service: Invalid fix response structure`);
-          throw new Error('Invalid fix response: missing or invalid operations array');
+          throw new Error(
+            'Invalid fix response: missing or invalid operations array',
+          );
         }
-        
-        console.log(`🎉 Error Fix Service: Error analysis completed successfully`);
+
+        console.log(
+          `🎉 Error Fix Service: Error analysis completed successfully`,
+        );
         return fixResponse;
       } catch (parseError) {
-        console.log(`⚠️ Error Fix Service: JSON parsing failed: ${parseError.message}`);
-        console.log(`📄 Error Fix Service: Raw response preview (first 500 chars): ${aiResponse.substring(0, 500)}`);
-        console.log(`📄 Error Fix Service: Raw response preview (last 100 chars): ${aiResponse.substring(Math.max(0, aiResponse.length - 100))}`);
+        console.log(
+          `⚠️ Error Fix Service: JSON parsing failed: ${parseError.message}`,
+        );
+        console.log(
+          `📄 Error Fix Service: Raw response preview (first 500 chars): ${aiResponse.substring(0, 500)}`,
+        );
+        console.log(
+          `📄 Error Fix Service: Raw response preview (last 100 chars): ${aiResponse.substring(Math.max(0, aiResponse.length - 100))}`,
+        );
         return null;
       }
-    } catch (error) {      console.error(`❌ Error Fix Service: Error generating fix: ${error.message}`);
+    } catch (error) {
+      console.error(
+        `❌ Error Fix Service: Error generating fix: ${error.message}`,
+      );
       return null;
     }
   }
   private buildErrorFixPrompt(errorContext: CompilationErrorContext): string {
-    console.log(`🔧 Error Fix Service: Building error fix prompt for "${errorContext.pluginName}"`);
+    console.log(
+      `🔧 Error Fix Service: Building error fix prompt for "${errorContext.pluginName}"`,
+    );
     const { compilationLogs, currentProject, pluginName } = errorContext;
 
     // Create a complete project snapshot as JSON
-    console.log(`📁 Error Fix Service: Creating project snapshot with ${currentProject.files.length} files`);
+    console.log(
+      `📁 Error Fix Service: Creating project snapshot with ${currentProject.files.length} files`,
+    );
     const projectSnapshot = JSON.stringify(
       {
         projectName: currentProject.projectName,
@@ -365,22 +416,30 @@ CRITICAL REQUIREMENTS:
 - Ensure all file paths are relative to the project root
 - Make sure all modifications are syntactically correct and follow Java best practices`;
 
-    console.log(`✅ Error Fix Service: Built error fix prompt (${prompt.length} characters)`);
+    console.log(
+      `✅ Error Fix Service: Built error fix prompt (${prompt.length} characters)`,
+    );
     return prompt;
   }
   private async applyFixOperations(
     fixResponse: ErrorFixResponse,
     errorContext: CompilationErrorContext,
   ): Promise<number> {
-    console.log(`🔧 Error Fix Service: Applying ${fixResponse.operations.length} fix operations`);
-    console.log(`📝 Error Fix Service: Fix description: ${fixResponse.fixDescription}`);
-    
+    console.log(
+      `🔧 Error Fix Service: Applying ${fixResponse.operations.length} fix operations`,
+    );
+    console.log(
+      `📝 Error Fix Service: Fix description: ${fixResponse.fixDescription}`,
+    );
+
     let operationsApplied = 0;
 
     try {
       for (const operation of fixResponse.operations) {
-        console.log(`🔄 Error Fix Service: Processing ${operation.type} operation for ${operation.file.path || operation.file.oldPath || 'unknown'}`);
-        
+        console.log(
+          `🔄 Error Fix Service: Processing ${operation.type} operation for ${operation.file.path || operation.file.oldPath || 'unknown'}`,
+        );
+
         try {
           switch (operation.type) {
             case 'UPDATE':
@@ -397,7 +456,9 @@ CRITICAL REQUIREMENTS:
                 );
                 operationsApplied++;
               } else {
-                console.warn(`⚠️ Skipping ${operation.type} operation: missing path or content`);
+                console.warn(
+                  `⚠️ Skipping ${operation.type} operation: missing path or content`,
+                );
               }
               break;
 
@@ -414,7 +475,9 @@ CRITICAL REQUIREMENTS:
                   );
                   operationsApplied++;
                 } else {
-                  console.warn(`⚠️ File not found for deletion: ${operation.file.path}`);
+                  console.warn(
+                    `⚠️ File not found for deletion: ${operation.file.path}`,
+                  );
                 }
               } else {
                 console.warn(`⚠️ Skipping DELETE operation: missing path`);
@@ -439,10 +502,14 @@ CRITICAL REQUIREMENTS:
                   );
                   operationsApplied++;
                 } else {
-                  console.warn(`⚠️ Source file not found for rename: ${operation.file.oldPath}`);
+                  console.warn(
+                    `⚠️ Source file not found for rename: ${operation.file.oldPath}`,
+                  );
                 }
               } else {
-                console.warn(`⚠️ Skipping RENAME operation: missing oldPath or newPath`);
+                console.warn(
+                  `⚠️ Skipping RENAME operation: missing oldPath or newPath`,
+                );
               }
               break;
 
@@ -454,36 +521,51 @@ CRITICAL REQUIREMENTS:
             `❌ Failed to apply operation ${operation.type} for ${operation.file.path || operation.file.oldPath}:`,
             opError.message,
           );
-        }      }
+        }
+      }
 
-      console.log(`📊 Error Fix Service: Successfully applied ${operationsApplied} of ${fixResponse.operations.length} operations`);      // Update project-info.json with fix information
+      console.log(
+        `📊 Error Fix Service: Successfully applied ${operationsApplied} of ${fixResponse.operations.length} operations`,
+      ); // Update project-info.json with fix information
       const projectInfoPath = path.join(
         errorContext.projectPath,
         'project-info.json',
       );
       if (await this.safePathExists(projectInfoPath)) {
         try {
-          const projectInfoContent = await this.safeReadFile(projectInfoPath, 'utf8');          const projectInfo: any = this.safeJSONParse(projectInfoContent, {});
-          
+          const projectInfoContent = await this.safeReadFile(
+            projectInfoPath,
+            'utf8',
+          );
+          const projectInfo: any = this.safeJSONParse(projectInfoContent, {});
+
           projectInfo.lastFixAttempt = {
             timestamp: new Date().toISOString(),
             fixDescription: fixResponse.fixDescription,
             operationsApplied: operationsApplied,
             expectedOutcome: fixResponse.expectedOutcome,
           };
-          
+
           const updatedInfo = this.safeJSONStringify(projectInfo);
           await this.safeWriteFile(projectInfoPath, updatedInfo, 'utf8');
-          console.log(`📄 Error Fix Service: Updated project-info.json with fix details`);
+          console.log(
+            `📄 Error Fix Service: Updated project-info.json with fix details`,
+          );
         } catch (error) {
-          console.warn(`⚠️ Error Fix Service: Could not update project-info.json: ${error.message}`);
+          console.warn(
+            `⚠️ Error Fix Service: Could not update project-info.json: ${error.message}`,
+          );
         }
       }
     } catch (error) {
-      console.error(`❌ Error Fix Service: Error applying fix operations: ${error.message}`);
+      console.error(
+        `❌ Error Fix Service: Error applying fix operations: ${error.message}`,
+      );
     }
-    
-    console.log(`🎯 Error Fix Service: Completed operation application - ${operationsApplied} operations applied`);
+
+    console.log(
+      `🎯 Error Fix Service: Completed operation application - ${operationsApplied} operations applied`,
+    );
     return operationsApplied;
   }
 
@@ -597,7 +679,7 @@ CRITICAL REQUIREMENTS:
       );
 
       // Ensure the project directory exists
-      await fs.ensureDir(projectPath);      // Write all the files from the plugin project
+      await fs.ensureDir(projectPath); // Write all the files from the plugin project
       for (const file of pluginProject.files) {
         const filePath = path.join(projectPath, file.path);
 
@@ -626,24 +708,32 @@ CRITICAL REQUIREMENTS:
   /**
    * Robust JSON parsing for AI fix responses with comprehensive error handling
    */
-  private async parseAIFixResponse(aiResponse: string): Promise<ErrorFixResponse> {
-    console.log(`🔍 Error Fix Service: Starting robust JSON parsing (${aiResponse.length} chars)`);
-    
+  private async parseAIFixResponse(
+    aiResponse: string,
+  ): Promise<ErrorFixResponse> {
+    console.log(
+      `🔍 Error Fix Service: Starting robust JSON parsing (${aiResponse.length} chars)`,
+    );
+
     // Step 1: Pre-validation checks
     if (!aiResponse || aiResponse.trim().length === 0) {
       throw new Error('Empty AI fix response received');
     }
-    
+
     // Step 2: Clean and normalize the response
     let cleanedResponse = this.cleanAIResponse(aiResponse);
-    console.log(`🧹 Error Fix Service: Cleaned response (${cleanedResponse.length} chars)`);
-    
+    console.log(
+      `🧹 Error Fix Service: Cleaned response (${cleanedResponse.length} chars)`,
+    );
+
     // Step 3: Validate basic JSON structure
     if (!this.isValidJSONStructure(cleanedResponse)) {
-      console.log(`⚠️ Error Fix Service: Invalid JSON structure detected, attempting extraction`);
+      console.log(
+        `⚠️ Error Fix Service: Invalid JSON structure detected, attempting extraction`,
+      );
       cleanedResponse = this.extractJSONFromResponse(cleanedResponse);
     }
-    
+
     // Step 4: Try multiple parsing strategies with enhanced validation
     const parsingStrategies = [
       () => this.parseDirectJSON(cleanedResponse),
@@ -651,32 +741,43 @@ CRITICAL REQUIREMENTS:
       () => this.parseWithFallbackCleaning(cleanedResponse),
       () => this.parseWithBracketMatching(cleanedResponse),
       () => this.parseWithQuoteEscaping(cleanedResponse),
-      () => this.parseWithAdvancedCleaning(cleanedResponse)
+      () => this.parseWithAdvancedCleaning(cleanedResponse),
     ];
-    
+
     for (let i = 0; i < parsingStrategies.length; i++) {
       try {
-        console.log(`🔍 Error Fix Service: Trying parsing strategy ${i + 1}...`);
+        console.log(
+          `🔍 Error Fix Service: Trying parsing strategy ${i + 1}...`,
+        );
         const result = parsingStrategies[i]();
         if (result) {
           // Enhanced validation before accepting result
           const validationResult = this.validateFixResponseStructure(result);
           if (validationResult.isValid) {
-            const validatedResponse = this.validateAndSanitizeFixResponse(result);
-            console.log(`✅ Error Fix Service: Successfully parsed with strategy ${i + 1}`);
+            const validatedResponse =
+              this.validateAndSanitizeFixResponse(result);
+            console.log(
+              `✅ Error Fix Service: Successfully parsed with strategy ${i + 1}`,
+            );
             return validatedResponse;
           } else {
-            console.log(`⚠️ Error Fix Service: Strategy ${i + 1} parsed but failed validation: ${validationResult.errors.join(', ')}`);
+            console.log(
+              `⚠️ Error Fix Service: Strategy ${i + 1} parsed but failed validation: ${validationResult.errors.join(', ')}`,
+            );
             continue;
           }
         }
       } catch (error) {
-        console.log(`⚠️ Error Fix Service: Strategy ${i + 1} failed: ${error.message}`);
+        console.log(
+          `⚠️ Error Fix Service: Strategy ${i + 1} failed: ${error.message}`,
+        );
         continue;
       }
     }
-    
-    throw new Error('All JSON parsing strategies failed for error fix response with enhanced validation');
+
+    throw new Error(
+      'All JSON parsing strategies failed for error fix response with enhanced validation',
+    );
   }
 
   /**
@@ -684,17 +785,17 @@ CRITICAL REQUIREMENTS:
    */
   private cleanAIResponse(response: string): string {
     let cleaned = response.trim();
-    
+
     // Remove markdown code blocks
     if (cleaned.startsWith('```json')) {
       cleaned = cleaned.replace(/^```json\s*/, '').replace(/\s*```$/, '');
     } else if (cleaned.startsWith('```')) {
       cleaned = cleaned.replace(/^```\s*/, '').replace(/\s*```$/, '');
     }
-    
+
     // Remove any leading/trailing non-JSON text
     cleaned = cleaned.replace(/^[^{]*/, '').replace(/[^}]*$/, '');
-    
+
     return cleaned;
   }
 
@@ -716,7 +817,7 @@ CRITICAL REQUIREMENTS:
     try {
       const jsonMatch = input.match(/\{[\s\S]*\}/);
       if (!jsonMatch) return null;
-      
+
       return JSON.parse(jsonMatch[0]);
     } catch (error) {
       return null;
@@ -729,12 +830,12 @@ CRITICAL REQUIREMENTS:
   private parseWithFallbackCleaning(input: string): ErrorFixResponse | null {
     try {
       let cleaned = input;
-      
+
       // Fix common JSON issues
       cleaned = cleaned.replace(/,(\s*[}\]])/g, '$1'); // Remove trailing commas
       cleaned = cleaned.replace(/([{,]\s*)(\w+):/g, '$1"$2":'); // Quote unquoted keys
       cleaned = cleaned.replace(/:\s*'([^']*)'/g, ': "$1"'); // Replace single quotes with double quotes
-      
+
       return JSON.parse(cleaned);
     } catch (error) {
       return null;
@@ -749,7 +850,7 @@ CRITICAL REQUIREMENTS:
       let braceCount = 0;
       let startIndex = -1;
       let endIndex = -1;
-      
+
       for (let i = 0; i < input.length; i++) {
         if (input[i] === '{') {
           if (startIndex === -1) startIndex = i;
@@ -762,12 +863,12 @@ CRITICAL REQUIREMENTS:
           }
         }
       }
-      
+
       if (startIndex !== -1 && endIndex !== -1) {
         const jsonCandidate = input.substring(startIndex, endIndex + 1);
         return JSON.parse(jsonCandidate);
       }
-      
+
       return null;
     } catch (error) {
       return null;
@@ -780,12 +881,13 @@ CRITICAL REQUIREMENTS:
   private parseWithQuoteEscaping(input: string): ErrorFixResponse | null {
     try {
       let processed = input;
-      
+
       // Special handling for file content with escaped quotes
-      processed = processed.replace(/\\"/g, '\\"')
-                          .replace(/\\n/g, '\\n')
-                          .replace(/\\\\/g, '\\\\');
-      
+      processed = processed
+        .replace(/\\"/g, '\\"')
+        .replace(/\\n/g, '\\n')
+        .replace(/\\\\/g, '\\\\');
+
       return JSON.parse(processed);
     } catch (error) {
       return null;
@@ -797,7 +899,9 @@ CRITICAL REQUIREMENTS:
    */
   private isValidJSONStructure(input: string): boolean {
     const trimmed = input.trim();
-    return trimmed.startsWith('{') && trimmed.endsWith('}') && trimmed.length > 10;
+    return (
+      trimmed.startsWith('{') && trimmed.endsWith('}') && trimmed.length > 10
+    );
   }
 
   /**
@@ -806,11 +910,11 @@ CRITICAL REQUIREMENTS:
   private extractJSONFromResponse(input: string): string {
     const firstBrace = input.indexOf('{');
     const lastBrace = input.lastIndexOf('}');
-    
+
     if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
       return input.substring(firstBrace, lastBrace + 1);
     }
-    
+
     return input;
   }
 
@@ -820,7 +924,7 @@ CRITICAL REQUIREMENTS:
   private parseWithAdvancedCleaning(input: string): ErrorFixResponse | null {
     try {
       let cleaned = input;
-      
+
       // Advanced JSON repair strategies for error fix responses
       cleaned = cleaned.replace(/,(\s*[}\]])/g, '$1'); // Remove trailing commas
       cleaned = cleaned.replace(/([{,]\s*)(\w+):/g, '$1"$2":'); // Quote unquoted keys
@@ -830,13 +934,18 @@ CRITICAL REQUIREMENTS:
       cleaned = cleaned.replace(/\n/g, '\\n'); // Escape actual newlines
       cleaned = cleaned.replace(/\r/g, ''); // Remove carriage returns
       cleaned = cleaned.replace(/\t/g, '\\t'); // Escape tabs
-      
+
       // Fix operation content escaping issues
-      cleaned = cleaned.replace(/"content":\s*"([^"]*(?:\\"[^"]*)*)"(?=\s*,|\s*})/g, (match, content) => {
-        const properlyEscaped = content.replace(/\\"/g, '"').replace(/"/g, '\\"');
-        return `"content": "${properlyEscaped}"`;
-      });
-      
+      cleaned = cleaned.replace(
+        /"content":\s*"([^"]*(?:\\"[^"]*)*)"(?=\s*,|\s*})/g,
+        (match, content) => {
+          const properlyEscaped = content
+            .replace(/\\"/g, '"')
+            .replace(/"/g, '\\"');
+          return `"content": "${properlyEscaped}"`;
+        },
+      );
+
       return JSON.parse(cleaned);
     } catch (error) {
       return null;
@@ -846,28 +955,40 @@ CRITICAL REQUIREMENTS:
   /**
    * Comprehensive error fix response structure validation
    */
-  private validateFixResponseStructure(obj: any): { isValid: boolean; errors: string[] } {
+  private validateFixResponseStructure(obj: any): {
+    isValid: boolean;
+    errors: string[];
+  } {
     const errors: string[] = [];
-    
+
     // Check top-level structure
     if (!obj || typeof obj !== 'object') {
       errors.push('Response is not an object');
       return { isValid: false, errors };
     }
-    
+
     // Check required fields
-    const requiredFields = ['fixDescription', 'operations', 'buildCommands', 'expectedOutcome'];
+    const requiredFields = [
+      'fixDescription',
+      'operations',
+      'buildCommands',
+      'expectedOutcome',
+    ];
     for (const field of requiredFields) {
       if (!(field in obj)) {
         errors.push(`Missing required field: ${field}`);
       }
     }
-    
+
     // Validate fixDescription
-    if (obj.fixDescription && (typeof obj.fixDescription !== 'string' || obj.fixDescription.trim().length === 0)) {
+    if (
+      obj.fixDescription &&
+      (typeof obj.fixDescription !== 'string' ||
+        obj.fixDescription.trim().length === 0)
+    ) {
       errors.push('fixDescription must be a non-empty string');
     }
-    
+
     // Validate operations array
     if (obj.operations) {
       if (!Array.isArray(obj.operations)) {
@@ -878,69 +999,99 @@ CRITICAL REQUIREMENTS:
             errors.push(`Operation ${index} is not an object`);
             return;
           }
-          
+
           // Validate operation type
           const validTypes = ['UPDATE', 'CREATE', 'DELETE', 'RENAME'];
           if (!operation.type || !validTypes.includes(operation.type)) {
-            errors.push(`Operation ${index} has invalid type: ${operation.type}`);
+            errors.push(
+              `Operation ${index} has invalid type: ${operation.type}`,
+            );
           }
-          
+
           // Validate file object
           if (!operation.file || typeof operation.file !== 'object') {
             errors.push(`Operation ${index} missing file object`);
             return;
           }
-          
+
           // Validate required fields based on operation type
           if (operation.type === 'RENAME') {
             if (!operation.file.oldPath || !operation.file.newPath) {
-              errors.push(`RENAME operation ${index} missing oldPath or newPath`);
+              errors.push(
+                `RENAME operation ${index} missing oldPath or newPath`,
+              );
             }
           } else if (operation.type === 'DELETE') {
             if (!operation.file.path) {
               errors.push(`DELETE operation ${index} missing path`);
             }
-          } else if (operation.type === 'UPDATE' || operation.type === 'CREATE') {
+          } else if (
+            operation.type === 'UPDATE' ||
+            operation.type === 'CREATE'
+          ) {
             if (!operation.file.path) {
               errors.push(`${operation.type} operation ${index} missing path`);
             }
-            if (!operation.file.content || typeof operation.file.content !== 'string') {
-              errors.push(`${operation.type} operation ${index} missing or invalid content`);
+            if (
+              !operation.file.content ||
+              typeof operation.file.content !== 'string'
+            ) {
+              errors.push(
+                `${operation.type} operation ${index} missing or invalid content`,
+              );
             }
           }
-          
+
           // Validate reason
-          if (!operation.file.reason || typeof operation.file.reason !== 'string') {
+          if (
+            !operation.file.reason ||
+            typeof operation.file.reason !== 'string'
+          ) {
             errors.push(`Operation ${index} missing reason`);
           }
         });
       }
     }
-    
+
     // Validate buildCommands
     if (obj.buildCommands && !Array.isArray(obj.buildCommands)) {
       errors.push('buildCommands must be an array');
     }
-    
+
     // Validate expectedOutcome
-    if (obj.expectedOutcome && (typeof obj.expectedOutcome !== 'string' || obj.expectedOutcome.trim().length === 0)) {
+    if (
+      obj.expectedOutcome &&
+      (typeof obj.expectedOutcome !== 'string' ||
+        obj.expectedOutcome.trim().length === 0)
+    ) {
       errors.push('expectedOutcome must be a non-empty string');
     }
-    
-    return { isValid: errors.length === 0, errors };  }
+
+    return { isValid: errors.length === 0, errors };
+  }
 
   /**
    * Validate and sanitize the parsed fix response
    */
   private validateAndSanitizeFixResponse(response: any): ErrorFixResponse {
     const sanitized: ErrorFixResponse = {
-      fixDescription: this.validateString(response.fixDescription, 'Automated error fix'),
+      fixDescription: this.validateString(
+        response.fixDescription,
+        'Automated error fix',
+      ),
       operations: this.validateOperations(response.operations),
-      buildCommands: this.validateArray(response.buildCommands, ['mvn clean compile']),
-      expectedOutcome: this.validateString(response.expectedOutcome, 'Compilation errors resolved')
+      buildCommands: this.validateArray(response.buildCommands, [
+        'mvn clean compile',
+      ]),
+      expectedOutcome: this.validateString(
+        response.expectedOutcome,
+        'Compilation errors resolved',
+      ),
     };
-    
-    console.log(`🔧 Error Fix Service: Validated fix response with ${sanitized.operations.length} operations`);
+
+    console.log(
+      `🔧 Error Fix Service: Validated fix response with ${sanitized.operations.length} operations`,
+    );
     return sanitized;
   }
 
@@ -948,7 +1099,9 @@ CRITICAL REQUIREMENTS:
    * Validate string fields with fallback
    */
   private validateString(value: any, fallback: string): string {
-    return (typeof value === 'string' && value.trim().length > 0) ? value.trim() : fallback;
+    return typeof value === 'string' && value.trim().length > 0
+      ? value.trim()
+      : fallback;
   }
 
   /**
@@ -963,12 +1116,14 @@ CRITICAL REQUIREMENTS:
    */
   private validateOperations(operations: any): FileOperation[] {
     if (!Array.isArray(operations)) {
-      console.log(`⚠️ Error Fix Service: Operations is not an array, returning empty array`);
+      console.log(
+        `⚠️ Error Fix Service: Operations is not an array, returning empty array`,
+      );
       return [];
     }
-    
+
     const validOperations: FileOperation[] = [];
-    
+
     for (const op of operations) {
       try {
         if (this.isValidOperation(op)) {
@@ -979,17 +1134,19 @@ CRITICAL REQUIREMENTS:
               oldPath: op.file?.oldPath?.trim() || undefined,
               newPath: op.file?.newPath?.trim() || undefined,
               content: this.sanitizeFileContent(op.file?.content),
-              reason: this.validateString(op.file?.reason, 'File operation')
-            }
+              reason: this.validateString(op.file?.reason, 'File operation'),
+            },
           });
         } else {
           console.log(`⚠️ Error Fix Service: Skipping invalid operation:`, op);
         }
       } catch (error) {
-        console.log(`⚠️ Error Fix Service: Error processing operation: ${error.message}`);
+        console.log(
+          `⚠️ Error Fix Service: Error processing operation: ${error.message}`,
+        );
       }
     }
-    
+
     return validOperations;
   }
 
@@ -998,10 +1155,12 @@ CRITICAL REQUIREMENTS:
    */
   private isValidOperation(operation: any): boolean {
     const validTypes = ['UPDATE', 'CREATE', 'DELETE', 'RENAME'];
-    return operation && 
-           validTypes.includes(operation.type) &&
-           operation.file &&
-           typeof operation.file === 'object';
+    return (
+      operation &&
+      validTypes.includes(operation.type) &&
+      operation.file &&
+      typeof operation.file === 'object'
+    );
   }
   /**
    * Sanitize file content to prevent issues
@@ -1010,11 +1169,11 @@ CRITICAL REQUIREMENTS:
     if (content === null || content === undefined) {
       return undefined;
     }
-    
+
     if (typeof content !== 'string') {
       return String(content);
     }
-    
+
     // Normalize line endings and ensure proper escaping
     return content.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
   }
@@ -1022,14 +1181,18 @@ CRITICAL REQUIREMENTS:
   /**
    * Safely read a file with comprehensive error handling
    */
-  private async safeReadFile(filePath: string, encoding: BufferEncoding = 'utf8'): Promise<string> {
+  private async safeReadFile(
+    filePath: string,
+    encoding: BufferEncoding = 'utf8',
+  ): Promise<string> {
     try {
       await fs.access(filePath, fs.constants.R_OK);
       const stats = await fs.stat(filePath);
       if (!stats.isFile()) {
         throw new Error(`Path is not a file: ${filePath}`);
       }
-      if (stats.size > 50 * 1024 * 1024) { // 50MB limit
+      if (stats.size > 50 * 1024 * 1024) {
+        // 50MB limit
         throw new Error(`File too large: ${filePath} (${stats.size} bytes)`);
       }
       const content = await fs.readFile(filePath, encoding);
@@ -1038,7 +1201,9 @@ CRITICAL REQUIREMENTS:
       }
       return content;
     } catch (error) {
-      console.error(`❌ Error Fix Service: Error reading file ${filePath}: ${error.message}`);
+      console.error(
+        `❌ Error Fix Service: Error reading file ${filePath}: ${error.message}`,
+      );
       throw new Error(`Failed to read file ${filePath}: ${error.message}`);
     }
   }
@@ -1046,7 +1211,11 @@ CRITICAL REQUIREMENTS:
   /**
    * Safely write a file with comprehensive error handling
    */
-  private async safeWriteFile(filePath: string, content: string, encoding: BufferEncoding = 'utf8'): Promise<void> {
+  private async safeWriteFile(
+    filePath: string,
+    content: string,
+    encoding: BufferEncoding = 'utf8',
+  ): Promise<void> {
     try {
       await fs.ensureDir(path.dirname(filePath));
       if (typeof content !== 'string') {
@@ -1056,7 +1225,9 @@ CRITICAL REQUIREMENTS:
       try {
         await fs.writeFile(tempPath, content, encoding);
         await fs.move(tempPath, filePath);
-        console.log(`✅ Error Fix Service: Successfully wrote file: ${filePath} (${content.length} chars)`);
+        console.log(
+          `✅ Error Fix Service: Successfully wrote file: ${filePath} (${content.length} chars)`,
+        );
       } catch (writeError) {
         if (await fs.pathExists(tempPath)) {
           await fs.remove(tempPath);
@@ -1064,7 +1235,9 @@ CRITICAL REQUIREMENTS:
         throw writeError;
       }
     } catch (error) {
-      console.error(`❌ Error Fix Service: Error writing file ${filePath}: ${error.message}`);
+      console.error(
+        `❌ Error Fix Service: Error writing file ${filePath}: ${error.message}`,
+      );
       throw new Error(`Failed to write file ${filePath}: ${error.message}`);
     }
   }
@@ -1073,24 +1246,36 @@ CRITICAL REQUIREMENTS:
    * Safely parse JSON with fallback and error handling
    */
   private safeJSONParse<T>(jsonString: string, fallback: T): T {
-    if (!jsonString || typeof jsonString !== 'string' || jsonString.trim().length === 0) {
-      console.log(`⚠️ Error Fix Service: Empty or invalid JSON string, using fallback`);
+    if (
+      !jsonString ||
+      typeof jsonString !== 'string' ||
+      jsonString.trim().length === 0
+    ) {
+      console.log(
+        `⚠️ Error Fix Service: Empty or invalid JSON string, using fallback`,
+      );
       return fallback;
     }
     try {
       const trimmed = jsonString.trim();
       if (!trimmed.startsWith('{') && !trimmed.startsWith('[')) {
-        console.log(`⚠️ Error Fix Service: JSON string doesn't start with { or [, using fallback`);
+        console.log(
+          `⚠️ Error Fix Service: JSON string doesn't start with { or [, using fallback`,
+        );
         return fallback;
       }
       const parsed = JSON.parse(trimmed);
       if (parsed === null || parsed === undefined) {
-        console.log(`⚠️ Error Fix Service: Parsed JSON is null/undefined, using fallback`);
+        console.log(
+          `⚠️ Error Fix Service: Parsed JSON is null/undefined, using fallback`,
+        );
         return fallback;
       }
       return parsed;
     } catch (error) {
-      console.warn(`⚠️ Error Fix Service: JSON parsing failed: ${error.message}, using fallback`);
+      console.warn(
+        `⚠️ Error Fix Service: JSON parsing failed: ${error.message}, using fallback`,
+      );
       return fallback;
     }
   }
@@ -1105,7 +1290,9 @@ CRITICAL REQUIREMENTS:
       }
       return JSON.stringify(object, null, indent);
     } catch (error) {
-      console.warn(`⚠️ Error Fix Service: JSON stringification failed: ${error.message}`);
+      console.warn(
+        `⚠️ Error Fix Service: JSON stringification failed: ${error.message}`,
+      );
       return '{}';
     }
   }
@@ -1117,7 +1304,9 @@ CRITICAL REQUIREMENTS:
     try {
       return await fs.pathExists(filePath);
     } catch (error) {
-      console.warn(`⚠️ Error Fix Service: Error checking path existence for ${filePath}: ${error.message}`);
+      console.warn(
+        `⚠️ Error Fix Service: Error checking path existence for ${filePath}: ${error.message}`,
+      );
       return false;
     }
   }
